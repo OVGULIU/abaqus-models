@@ -138,7 +138,7 @@ class Cutter:
         s.Line(point1=p3, point2=p4)
         s.Line(point1=p4, point2=p1)
         self.part.CutExtrude(sketchPlane=f, sketchUpEdge=e, sketchPlaneSide=SIDE1, 
-            sketchOrientation=RIGHT, sketch=s, flipExtrudeDirection=OFF, draftAngle=60.0)
+            sketchOrientation=RIGHT, sketch=s, flipExtrudeDirection=OFF, draftAngle=37.0)
         s.unsetPrimaryObject()
         del mdb.models['Model-1'].sketches['__profile__']
 

@@ -149,46 +149,21 @@ class Workpiece:
         self.part.generateMesh()
 
         
-class Cutter:
-    def __init__(self, name, length, height, thickness, tail_length, angle):
+class Tool:
+    def __init__(self, name, scale):
         self.name = name
-        self.length = length
-        self.height = height
-        self.thickness = thickness
-        self.tail_length = tail_length
-        self.angle = angle
+        self.step_file = 'D:/ereme/GoogleDrive/PostGraduate/AbaqusModels/mill3Dmodel/4-flute-flat-endmill-1.snapshot.4/endmill.stp'
+        self.diameter = mm(10)  # from file
+        self.length = mm(100)
+        self.cutter_length = mm(22)
+        self.scale = scale
         self.part = None
 
     def create(self):
-        s = mdb.models['Model-1'].ConstrainedSketch(name=self.name + '_sketch', sheetSize=max(self.length, self.thickness, self.tail_length))
-        g, v, d, c = s.geometry, s.vertices, s.dimensions, s.constraints    
-        s.sketchOptions.setValues(decimalPlaces=4)
-        s.setPrimaryObject(option=STANDALONE)
-
-        p0 = (0, 0)
-        p1 = (-self.length, 0)
-        p = (-self.length, 0.5 * self.thickness)
-        p2 = (-self.length - self.tail_length * cos(self.angle), 0.5 * self.thickness + self.tail_length * sin(self.angle))
-        p3 = (-self.length, self.thickness)
-        p4 = (0, self.thickness)
-        p5 = (self.length, self.thickness)
-        p_ = (self.length, 0.5 * self.thickness)
-        p6 = (self.length + self.tail_length * cos(self.angle), 0.5 * self.thickness - self.tail_length * sin(self.angle))
-        p7 = (self.length, 0)
-
-        s.Line(point1=p0, point2=p1)
-        s.Line(point1=p1, point2=p2)
-        s.Line(point1=p2, point2=p3)
-        s.Line(point1=p3, point2=p4)
-        s.Line(point1=p4, point2=p5)
-        s.Line(point1=p5, point2=p6)
-        s.Line(point1=p6, point2=p7)
-        s.Line(point1=p7, point2=p0)
-
-        p = mdb.models['Model-1'].Part(name=self.name, dimensionality=THREE_D, type=DEFORMABLE_BODY)
+        step = mdb.openStep(self.step_file)
+        mdb.models['Model-1'].PartFromGeometryFile(name=self.name, geometryFile=step, 
+                combine=False, dimensionality=THREE_D, type=DEFORMABLE_BODY, scale=self.scale)
         self.part = mdb.models['Model-1'].parts[self.name]
-        self.part.BaseSolidExtrude(sketch=s, depth=self.height)
-        s.unsetPrimaryObject()        
 
     def set_section(self, section):
         c = self.part.cells
@@ -212,7 +187,7 @@ class Cutter:
 
 
     def __str__(self):
-        return "Cutter: name={}, length={}, height={}, width={}, angle={}".format(self.name,self.length,self.height,self.width, self.angle)
+        return "Tool: name={}, scale={}".format(self.name, self.scale)
 
     def __repr__(self):
         return str(self)
@@ -220,18 +195,18 @@ class Cutter:
 
 class Assembly:
 
-    def __init__(self, workpiece, cutter):
+    def __init__(self, workpiece, tool):
         self.workpiece = workpiece
-        self.cutter = cutter
+        self.tool = tool
         self.a = mdb.models['Model-1'].rootAssembly
         self.a.DatumCsysByDefault(CARTESIAN)
         self.a.Instance(name=workpiece.name, part=workpiece.part, dependent=ON)
-        self.a.Instance(name=cutter.name, part=cutter.part, dependent=ON)
-        self.a.rotate(instanceList=(cutter.name, ), axisPoint=(0, 0, 0), axisDirection=(1, 0.0, 0.0), angle=90.0)
-        self.a.translate(instanceList=(cutter.name, ), vector=(0, workpiece.w_height + workpiece.b_height, 0))
-        self.a.translate(instanceList=(cutter.name, ), vector=(0, 0, workpiece.length*1.1))
-        self.a.translate(instanceList=(cutter.name, ), vector=(0.5 * (workpiece.b_width-workpiece.w_width) - cutter.length - cutter.tail_length * cos(cutter.angle), 0.0, 0.0))
-        self.a.translate(instanceList=(cutter.name, ), vector=(0.3 * workpiece.w_width, 0, 0))
+        self.a.Instance(name=tool.name, part=tool.part, dependent=ON)
+        self.a.rotate(instanceList=(tool.name, ), axisPoint=(0, 0, 0), axisDirection=(1, 0.0, 0.0), angle=-90.0)
+        self.a.translate(instanceList=(tool.name, ), vector=(0.5*(workpiece.w_width + workpiece.b_width), workpiece.w_height + workpiece.b_height, workpiece.length))
+        self.a.translate(instanceList=(tool.name, ), vector=(0, -0.75 * tool.cutter_length, 0))
+        self.a.translate(instanceList=(tool.name, ), vector=(-0.9 * tool.diameter, 0, 0))
+        self.a.translate(instanceList=(tool.name, ), vector=(0, 0, 0.5 * tool.diameter))
         session.viewports['Viewport: 1'].setValues(displayedObject=self.a)
         session.viewports['Viewport: 1'].view.fitView()
     
@@ -247,15 +222,15 @@ class Assembly:
         region = self.a.Set(faces=faces1, name='Workpiece bottom')
         mdb.models['Model-1'].EncastreBC(name='BC workpiece bottom', createStepName='Initial', region=region, localCsys=None)
 
-    def cutter_bc(self, step):
-        name = "BC cutter"
-        cutter_inst = self.a.instances[self.cutter.name]
+    def tool_bc(self, step):
+        name = "BC tool"
+        tool_inst = self.a.instances[self.tool.name]
         model = mdb.models['Model-1']
-        c1 = cutter_inst.cells
-        f1 = cutter_inst.faces
-        e1 = cutter_inst.edges
-        v1 = cutter_inst.vertices
-        region = self.a.Set(vertices=v1, edges=e1, faces=f1, cells=c1, name='Cutter set')
+        c1 = tool_inst.cells
+        f1 = tool_inst.faces
+        e1 = tool_inst.edges
+        v1 = tool_inst.vertices
+        region = self.a.Set(vertices=v1, edges=e1, faces=f1, cells=c1, name='Tool set')
         
         model.DisplacementBC(name=name, createStepName='Initial', 
             region=region, u1=SET, u2=SET, u3=SET, ur1=SET, ur2=SET, ur3=SET, 
@@ -263,6 +238,15 @@ class Assembly:
         model.TabularAmplitude(name='Amplitude-1', timeSpan=STEP, 
             smooth=SOLVER_DEFAULT, data=((0.0, 0.0), (MAX_TIME, 1.0)))
         model.boundaryConditions[name].setValuesInStep(stepName=step.name, u3=-self.workpiece.length, amplitude='Amplitude-1')
+
+        # model.VelocityBC(name='BC tool angular velocity', 
+        #     createStepName='Initial', region=region, v1=0.0, v2=0.0, v3=0.0, vr1=0.0, 
+        #     vr2=0.0, vr3=0, amplitude=UNSET, localCsys=None, 
+        #     distributionType=UNIFORM, fieldName='')
+        # model.boundaryConditions['BC tool angular velocity'].setValuesInStep(stepName=step.name, vr2=6500.0)
+
+
+
 
 
 class Step:
@@ -293,13 +277,13 @@ class Interaction:
 if __name__ == "__main__":
     executeOnCaeStartup()
     Mdb()  # clear all
-    workpiece = Workpiece("Brick", length=mm(50), w_height=mm(60), w_width=mm(5), b_height=mm(25), b_width=mm(50))
+    workpiece = Workpiece("Brick", length=mm(20), w_height=mm(60), w_width=mm(5), b_height=mm(25), b_width=mm(50))
     workpiece.create()
     workpiece.mesh()
     
-    cutter = Cutter("Cutter",  length=mm(15), height=mm(40), thickness=mm(0.5), tail_length=mm(5), angle=deg(60))
-    cutter.create()
-    cutter.mesh()
+    tool = Tool("Tool",  scale=1e-3)
+    tool.create()
+    tool.mesh()
     # Create materials
     steel = Material("Steel", density= 7870, young=2e11, poisson=0.29, 
         A=375e6, B=552e6, n=0.457, 
@@ -311,14 +295,13 @@ if __name__ == "__main__":
     alu_section = mdb.models['Model-1'].HomogeneousSolidSection(name='Alu section', material=alu.name, thickness=None)
     # assign materials
     workpiece.set_section(alu_section)
-    cutter.set_section(steel_section)
+    tool.set_section(steel_section)
 
-    assembly = Assembly(workpiece, cutter)
-
+    assembly = Assembly(workpiece, tool)
     step1 = Step("Step-1")
     Interaction(step1, friction=0.15)
     assembly.workpiece_bc()
-    assembly.cutter_bc(step1)
+    assembly.tool_bc(step1)
     mdb.Job(name='Chipformation', model='Model-1', description='', type=ANALYSIS, 
         atTime=None, waitMinutes=0, waitHours=0, queue=None, memory=90, 
         memoryUnits=PERCENTAGE, explicitPrecision=SINGLE, 
@@ -329,5 +312,5 @@ if __name__ == "__main__":
     mdb.models['Model-1'].fieldOutputRequests['F-Output-1'].setValues(variables=(
     'S', 'SVAVG', 'PE', 'PEVAVG', 'PEEQ', 'PEEQVAVG', 'LE', 'U', 'V', 'A', 
     'RF', 'CSTRESS', 'EVF', 'STATUS'))
-    mdb.jobs['Chipformation'].submit(consistencyChecking=OFF)
+    # mdb.jobs['Chipformation'].submit(consistencyChecking=OFF)
 

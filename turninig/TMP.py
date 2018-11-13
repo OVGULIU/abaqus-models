@@ -132,9 +132,9 @@ class Workpiece:
         self.part.SectionAssignment(region=region, sectionName=section.name, offset=0.0, 
             offsetType=MIDDLE_SURFACE, offsetField='', thicknessAssignment=FROM_SECTION)
 
-    def mesh(self, size=0.0015, deviationFactor=0.1, minSizeFactor=0.1):
+    def mesh(self, size, dev_factor, min_size_factor):
         self.part.setMeshControls(regions=self.part.cells, technique=SWEEP, algorithm=MEDIAL_AXIS)
-        self.part.seedPart(size=size, deviationFactor=deviationFactor, minSizeFactor=minSizeFactor)
+        self.part.seedPart(size=size, deviationFactor=dev_factor, minSizeFactor=min_size_factor)
         self.part.generateMesh()
 
     def partition(self):
@@ -179,9 +179,9 @@ class Jaw:
         point3 = (0, 0, 1)
         self.part.PartitionCellByPlaneThreePoints(cells=self.part.cells, point1=point1, point2=point2, point3=point3)
 
-    def mesh(self, size=0.0015, deviationFactor=0.1, minSizeFactor=0.1):
+    def mesh(self, size, dev_factor, min_size_factor):
         self.part.setMeshControls(regions=self.part.cells, technique=SWEEP, algorithm=MEDIAL_AXIS)
-        self.part.seedPart(size=size, deviationFactor=deviationFactor, minSizeFactor=minSizeFactor)
+        self.part.seedPart(size=size, deviationFactor=dev_factor, minSizeFactor=min_size_factor)
         self.part.generateMesh()
 
 
@@ -202,61 +202,6 @@ def __create_workpiece_partion():
         except:
             pass
     
-def __create_force_point(parameter):    
-    p = mdb.models['Model-1'].parts['Workpiece']
-    pickedEdges = mdb.models['Model-1'].parts['Workpiece'].edges.findAt((0,outer,length/2))
-    p.PartitionEdgeByParam(edges=pickedEdges, parameter=parameter)
-    
-def create_jaw_part(length, height, width):
-    """Creates a jaw part"""
-    s = mdb.models['Model-1'].ConstrainedSketch(name='__profile__', sheetSize=0.1) # 
-    g, v, d, c = s.geometry, s.vertices, s.dimensions, s.constraints #
-    s.sketchOptions.setValues(decimalPlaces=3)
-    s.setPrimaryObject(option=STANDALONE)
-    s.rectangle(point1=(0.0, 0.0), point2=(length, height)) #
-    p = mdb.models['Model-1'].Part(name='Jaw', dimensionality=THREE_D,  type=DEFORMABLE_BODY) # 
-    p = mdb.models['Model-1'].parts['Jaw']
-    p.BaseSolidExtrude(sketch=s, depth=width) #
-    s.unsetPrimaryObject()
-    p = mdb.models['Model-1'].parts['Jaw']
-    del mdb.models['Model-1'].sketches['__profile__'] #
-    __create_jaw_partion(p.name, length, height, width)
-    sys.__stdout__.write("Create jaw part "+" Length:"+str(length)+" Height:"+str(height)+" Width:"+str(width)+"\n")
-    return p.name
-    
-def __create_jaw_partion(part_name, length, height, width):
-    p = mdb.models['Model-1'].parts[part_name]
-    p1 = p.DatumPointByCoordinate(coords=(length/2, 0.0, 0.0)).id
-    p2 = p.DatumPointByCoordinate(coords=(length/2, height, width)).id
-    p3 = p.DatumPointByCoordinate(coords=(length/2, 0, width)).id
-    c, v1, e1, d1 = p.cells, p.vertices, p.edges, p.datums
-    p.PartitionCellByPlaneThreePoints(cells=c, point1=d1[p1], point2=d1[p2], point3=d1[p3])
-        
-    p1 = p.DatumPointByCoordinate(coords=(0.0, 0.0, width/2)).id
-    p2 = p.DatumPointByCoordinate(coords=(length, 0.0, width/2)).id
-    p3 = p.DatumPointByCoordinate(coords=(length, height, width/2)).id
-    c, v1, e1, d1 = p.cells, p.vertices, p.edges, p.datums
-    p.PartitionCellByPlaneThreePoints(cells=c, point1=d1[p1], point2=d1[p2], point3=d1[p3])
-    
-
-def create_section(section_name,material_name, type, thickness=None):
-    if type == 'solid':
-        mdb.models['Model-1'].HomogeneousSolidSection(name=section_name, material=material_name, thickness=None)
-        return section_name
-
-
-def create_material(material_name,young,poisson):
-    """Creates material with specified name, Young's modulus and Poisson ratio"""
-    mdb.models['Model-1'].Material(name=material_name)
-    mdb.models['Model-1'].materials[material_name].Elastic(table=((young, poisson), ))
-    return material_name
-
-def mesh_part(part_name, size, dev_factor, min_size_factor):
-    p = mdb.models['Model-1'].parts[part_name]
-    p.setMeshControls(regions=p.cells, technique=SWEEP, algorithm=MEDIAL_AXIS)
-    p.seedPart(size=size, deviationFactor=dev_factor, minSizeFactor=min_size_factor)
-    p.generateMesh()
-
 def create_property(friction_coeff):
     mdb.models['Model-1'].ContactProperty('IntProp-1')
     mdb.models['Model-1'].interactionProperties['IntProp-1'].TangentialBehavior(formulation=ROUGH)
@@ -265,7 +210,7 @@ def create_property(friction_coeff):
         contactStiffnessScaleFactor=1.0, clearanceAtZeroContactPressure=0.0, 
         stiffnessBehavior=LINEAR, constraintEnforcementMethod=PENALTY)
 
-def create_assembly(jawf, outer, length, tanf, radf, axlf, angle):
+def create_assembly(jawf, outer, length):
     create_property(f_coeff)# pass friction coeff
     a = mdb.models['Model-1'].rootAssembly
     a.DatumCsysByDefault(CARTESIAN)
@@ -288,16 +233,6 @@ def create_assembly(jawf, outer, length, tanf, radf, axlf, angle):
     mdb.models['Model-1'].parts['Workpiece'].generateMesh()
     a.regenerate()
     
-def reset_force_node():
-    x,y = pol2cart(outer,anglef)
-    z = length * fparameter
-    print "z="+str(z)
-    a = mdb.models['Model-1'].rootAssembly
-    
-    node = min(a.instances['Part-1'].nodes, key = lambda n: (n.coordinates[0]-x)**2 + (n.coordinates[1]-y)**2+(n.coordinates[2]-z)**2)
-    nodes1 = a.instances['Part-1'].nodes.sequenceFromLabels((node.label,))
-    a.Set(nodes=(nodes1,), name='Force-nodes')
-
 
 def apply_jaw_force(value, c_systems):
     for j in JAWS:
@@ -393,17 +328,7 @@ def create_jaw_BSs(c_systems):
             
 def create_step():
     mdb.models['Model-1'].StaticStep(name='Step-1', previous='Initial')
-
-
-def assign_section(part_name, section_name):
-    p = mdb.models['Model-1'].parts[part_name]
-    if p.cells:  # if solid
-        region = p.Set(cells=p.cells, name=part_name+'_material_region')
-    else:        # if shell
-        region = p.Set(faces=p.faces, name=part_name+'_material_region')
-    p.SectionAssignment(region=region, sectionName=section_name, offset=0.0, 
-                offsetType=TOP_SURFACE, offsetField='', 
-                thicknessAssignment=FROM_SECTION)          
+        
 
 def run_job(home):
     sys.__stdout__.write("Run job"+"\n")
@@ -423,7 +348,6 @@ def run_job(home):
 
 length, outer_diameter, inner_diameter = 0.060, 0.068, 0.059
 outer, inner = outer_diameter/2, inner_diameter/2
-anglef = 45
 fparameter = 0.6 # axial position of force (?)
 jcount = 3
 JAWS = range(1,jcount+1)
@@ -447,20 +371,21 @@ if __name__ == "__main__":
     
     workpiece = Workpiece(length=mm(60), inner=mm(59/2), outer=mm(68/2), p_num=jaw_num)
     workpiece.set_section(aluminum_section)
-
+    workpiece.mesh(size=0.002, dev_factor=0.1, min_size_factor = 0.1 )
 
 
     jaw = Jaw(length=mm(15), width=mm(15), height=mm(15))
     jaw.set_section(steel_section)
     jaw.partition()
+    jaw.mesh(size = 0.0015, dev_factor=0.1, min_size_factor = 0.1 )
 
-
-    mesh_part(part_name = jaw.name, size = 0.0015, dev_factor=0.1, min_size_factor = 0.1 )
-    mesh_part(part_name = workpiece.name, size = 0.002, dev_factor=0.1, min_size_factor = 0.1 )
-
-    create_assembly(jawf, outer, length, tanf, radf, axlf, anglef)
+    create_assembly(jawf, outer, length)
     a = mdb.models['Model-1'].rootAssembly
     session.viewports['Viewport: 1'].setValues(displayedObject=a)
     session.viewports['Viewport: 1'].view.setValues(session.views['Iso'])
 
     run_job(home)
+
+
+
+

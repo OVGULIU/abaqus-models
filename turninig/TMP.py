@@ -14,6 +14,10 @@ import math
 import numpy as np
 executeOnCaeStartup()
 
+Mdb()
+model = mdb.models['Model-1']
+
+
 def cart2pol(x, y):
     rho = np.sqrt(x**2 + y**2)
     phi = np.arctan2(y, x)
@@ -33,10 +37,10 @@ def create_workpiece_part(length, inner, outer, angle, parameter):
     s.CircleByCenterPerimeter(center=(0.0, 0.0), point1=(0.0, inner))
     s.CircleByCenterPerimeter(center=(0.0, 0.0), point1=(0.0, outer))
     p = mdb.models['Model-1'].Part(name='Part', dimensionality=THREE_D, type=DEFORMABLE_BODY)
-    p = mdb.models['Model-1'].parts['Part']
+    p = mdb.models['Model-1'].parts[workpiece.name]
     p.BaseSolidExtrude(sketch=s, depth=length)
     s.unsetPrimaryObject()
-    p = mdb.models['Model-1'].parts['Part']
+    p = mdb.models['Model-1'].parts[workpiece.name]
     session.viewports['Viewport: 1'].setValues(displayedObject=p)
     del mdb.models['Model-1'].sketches['__profile__']
     
@@ -45,7 +49,7 @@ def create_workpiece_part(length, inner, outer, angle, parameter):
     return p.name
 
 def __create_workpiece_partion():
-    p = mdb.models['Model-1'].parts['Part']
+    p = mdb.models['Model-1'].parts[workpiece.name]
     d1 = p.DatumAxisByPrincipalAxis(principalAxis=ZAXIS)
     v, e1 = p.vertices, p.edges
     d2 = p.DatumPlaneByThreePoints(point1=v[0], point3=v[1], point2=p.InterestingPoint(edge=e1[0], rule=CENTER))
@@ -62,8 +66,8 @@ def __create_workpiece_partion():
             pass
     
 def __create_force_point(parameter):    
-    p = mdb.models['Model-1'].parts['Part']
-    pickedEdges = mdb.models['Model-1'].parts['Part'].edges.findAt((0,outer,length/2))
+    p = mdb.models['Model-1'].parts[workpiece.name]
+    pickedEdges = mdb.models['Model-1'].parts[workpiece.name].edges.findAt((0,outer,length/2))
     p.PartitionEdgeByParam(edges=pickedEdges, parameter=parameter)
     
 def create_jaw_part(length, height, width):
@@ -128,7 +132,7 @@ def create_assembly(jawf, outer, length, tanf, radf, axlf, angle):
     create_property(f_coeff)# pass friction coeff
     a = mdb.models['Model-1'].rootAssembly
     a.DatumCsysByDefault(CARTESIAN)
-    p = mdb.models['Model-1'].parts['Part']
+    p = mdb.models['Model-1'].parts[workpiece.name]
     a.Instance(name='Part-1', part=p, dependent=ON)
     p = mdb.models['Model-1'].parts['Jaw']
     a.Instance(name='Jaw-1', part=p, dependent=ON)
@@ -147,7 +151,7 @@ def create_assembly(jawf, outer, length, tanf, radf, axlf, angle):
     create_jaw_BSs(c_systems)
     apply_jaw_force(jawf, c_systems)
     __create_workpiece_partion()
-    mdb.models['Model-1'].parts['Part'].generateMesh()
+    mdb.models['Model-1'].parts[workpiece.name].generateMesh()
     a.regenerate()
     
 def reset_force_node():
@@ -314,8 +318,59 @@ def run_job(home):
     numGPUs=0)
     Job1.submit(consistencyChecking=OFF)
     Job1.waitForCompletion()
+
+
+class Workpiece:
+
+    def __init__(self, length, inner, outer, p_num):
+        self.name = "Workpiece"
+        self.length = length
+        self.inner = inner
+        self.outer = outer
+        self.p_num = p_num
+
+        sketch = model.ConstrainedSketch(name=self.name + '-profile', sheetSize=0.1)
+        sketch.sketchOptions.setValues(decimalPlaces=3)
+        sketch.setPrimaryObject(option=STANDALONE)
+        sketch.CircleByCenterPerimeter(center=(0.0, 0.0), point1=(0.0, self.inner))
+        sketch.CircleByCenterPerimeter(center=(0.0, 0.0), point1=(0.0, self.outer))
+        model.Part(name=self.name, dimensionality=THREE_D, type=DEFORMABLE_BODY)
+        self.part = model.parts[self.name]
+        self.part.BaseSolidExtrude(sketch=sketch, depth=self.length)
+        sketch.unsetPrimaryObject()
+
+
+    def set_section(self, section):
+        region = self.part.Set(cells=self.part.cells, name='Material-region')
+        self.part.SectionAssignment(region=region, sectionName=section.name, offset=0.0, 
+            offsetType=MIDDLE_SURFACE, offsetField='', thicknessAssignment=FROM_SECTION)
     
-Mdb()
+
+    def mesh(self, size=0.0015, deviationFactor=0.1, minSizeFactor=0.1):
+        self.part.setMeshControls(regions=self.part.cells, technique=SWEEP, algorithm=MEDIAL_AXIS)
+        self.part.seedPart(size=size, deviationFactor=deviationFactor, minSizeFactor=minSizeFactor)
+        self.part.generateMesh()
+
+
+    def partition(self):
+        for p in range(0, self.p_num):
+            try:
+                self.part.PartitionCellByPlaneThreePoints(cells=self.part.cells, 
+                    point1=(0, 0, 0), 
+                    point2=(0, 0, 1),
+                    point3=rotate(point=(0, 1, 0), axis=OZ, theta = deg(p * 360/self.p_num)))
+            except:
+                pass
+
+
+class Material:
+
+    def __init__(self, name, young, poisson):
+        self.name = name
+        model.Material(name=name)
+        model.materials[name].Elastic(table=((young, poisson), ))
+        self.material =  model.materials[name]
+
 
 length, outer_diameter, inner_diameter = 0.060, 0.068, 0.059
 outer, inner = outer_diameter/2, inner_diameter/2
@@ -343,18 +398,21 @@ if __name__ == "__main__":
     home = 'C:\\Program Files\\SIMULIA\\Workspace'
     os.chdir(home)
 
-    workpiece_part=create_workpiece_part(length, inner, outer, anglef, fparameter)
+    # workpiece_part=create_workpiece_part(length, inner, outer, anglef, fparameter)
+    workpiece_part=Workpiece(length, inner, outer, p_num=3)
     jaw_part = create_jaw_part(jaw_width, jaw_height, jaw_length)
-    j_material = create_material('Jaw_material', jaw_young, jaw_poisson)
-    w_material = create_material('Workpiece_material', workpiece_young, workpiece_poisson)
-    j_section = create_section(section_name='Jaw_section', material_name=j_material,type='solid')
-    w_section = create_section(section_name='Workpiece_section', material_name=w_material,type='solid')#,thickness=0.002)
+
+    steel = Material('Steel', jaw_young, jaw_poisson)
+    steel_section = model.HomogeneousSolidSection(name='Steel-section', material=steel.name, thickness=None)
+
+    aluminum = Material('Aluminum', workpiece_young, workpiece_poisson)
+    aluminum_section = model.HomogeneousSolidSection(name='Aluminum-section', material=aluminum.name, thickness=None)
     
     mesh_part(part_name = jaw_part, size = jaw_mesh_size, dev_factor=0.1, min_size_factor = 0.1 )
-    mesh_part(part_name = workpiece_part, size = workpiece_mesh_size, dev_factor=0.1, min_size_factor = 0.1 )
+    mesh_part(part_name = workpiece_part.name, size = workpiece_mesh_size, dev_factor=0.1, min_size_factor = 0.1 )
 
-    assign_section(part_name = workpiece_part, section_name = w_section)
-    assign_section(part_name = jaw_part, section_name = j_section)
+    assign_section(part_name = workpiece_part.name, section_name = aluminum_section.name)
+    assign_section(part_name = jaw_part, section_name = steel_section.name)
     
     create_assembly(jawf, outer, length, tanf, radf, axlf, anglef)
     a = mdb.models['Model-1'].rootAssembly

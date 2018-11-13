@@ -427,49 +427,40 @@ anglef = 45
 fparameter = 0.6 # axial position of force (?)
 jcount = 3
 JAWS = range(1,jcount+1)
-jaw_length, jaw_height, jaw_width= 0.015, 0.015, 0.015
-jaw_young, jaw_poisson = 210e15, 0.29
-jaw_mesh_size = 0.0015
+
+
+
 jawf = 1000
 refresh = False
 f_coeff = 0.3
 
-workpiece_young, workpiece_poisson = 0.7e9, 0.28
 workpiece_mesh_size = 0.002
 
-tanf,radf,axlf = 200, 300, 100
-
-rplane = 0
-tplane = 1
 
 if __name__ == "__main__":
-    
-    home = 'C:\\Program Files\\SIMULIA\\Workspace'
-    os.chdir(home)
-
-    # workpiece_part=create_workpiece_part(length, inner, outer, anglef, fparameter)
-    workpiece_part=Workpiece(length, inner, outer, p_num=3)
-    jaw_part = Jaw(jaw_length, jaw_width, jaw_height)
-    jaw_part.partition()
-    # jaw_part = create_jaw_part(jaw_width, jaw_height, jaw_length)
-
-    steel = Material('Steel', jaw_young, jaw_poisson)
+    jaw_num = 3
+    steel = Material('Steel', 210e15, 0.29)
     steel_section = model.HomogeneousSolidSection(name='Steel-section', material=steel.name, thickness=None)
 
-    aluminum = Material('Aluminum', workpiece_young, workpiece_poisson)
+    aluminum = Material('Aluminum', 0.7e9, 0.28)
     aluminum_section = model.HomogeneousSolidSection(name='Aluminum-section', material=aluminum.name, thickness=None)
     
-    mesh_part(part_name = jaw_part.name, size = jaw_mesh_size, dev_factor=0.1, min_size_factor = 0.1 )
-    mesh_part(part_name = workpiece_part.name, size = workpiece_mesh_size, dev_factor=0.1, min_size_factor = 0.1 )
+    workpiece = Workpiece(length=mm(60), inner=mm(59/2), outer=mm(68/2), p_num=jaw_num)
+    workpiece.set_section(aluminum_section)
 
-    assign_section(part_name = workpiece_part.name, section_name = aluminum_section.name)
-    assign_section(part_name = jaw_part.name, section_name = steel_section.name)
-    
+
+
+    jaw = Jaw(length=mm(15), width=mm(15), height=mm(15))
+    jaw.set_section(steel_section)
+    jaw.partition()
+
+
+    mesh_part(part_name = jaw.name, size = 0.0015, dev_factor=0.1, min_size_factor = 0.1 )
+    mesh_part(part_name = workpiece.name, size = 0.002, dev_factor=0.1, min_size_factor = 0.1 )
+
     create_assembly(jawf, outer, length, tanf, radf, axlf, anglef)
     a = mdb.models['Model-1'].rootAssembly
     session.viewports['Viewport: 1'].setValues(displayedObject=a)
-    session.viewports['Viewport: 1'].assemblyDisplay.setValues(optimizationTasks=OFF, geometricRestrictions=OFF, stopConditions=OFF)
-    session.viewports['Viewport: 1'].odbDisplay.basicOptions.setValues(renderShellThickness=ON)
-    session.writeOBJFile(fileName=home+"/tmp_model.obj",canvasObjects= (session.viewports['Viewport: 1'], ))
-    # COMMENT_THIS_LINE
+    session.viewports['Viewport: 1'].view.setValues(session.views['Iso'])
+
     run_job(home)

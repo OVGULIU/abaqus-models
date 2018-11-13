@@ -1,6 +1,3 @@
-""""
-replace force with display
-"""
 from abaqus import *
 from abaqusConstants import *
 from caeModules import *
@@ -12,8 +9,9 @@ import os
 import argparse
 import math
 import numpy as np
-executeOnCaeStartup()
 
+
+executeOnCaeStartup()
 Mdb()
 model = mdb.models['Model-1']
 OX = (1, 0, 0)
@@ -65,16 +63,126 @@ def rotate(point, axis, theta):
     return tuple(np.dot(rotation_matrix(axis, theta), point))
     
 
-def cart2pol(x, y):
-    rho = np.sqrt(x**2 + y**2)
-    phi = np.arctan2(y, x)
-    return(rho, math.degrees(phi))
 
-def pol2cart(rho, phi):
-    phi = math.radians(phi)
-    x = rho * np.cos(phi)
-    y = rho * np.sin(phi)
-    return(x, y)   
+class MaterialExplicit:
+
+    def __init__(self, name, density, young, poisson, A, B, n, d1, d2, d3, ref_strain_rate, disp_at_failure):
+        self.name = name
+        mdb.models['Model-1'].Material(name=name)
+        self.material = mdb.models['Model-1'].materials[name]
+        self.material.Density(table=((density, ), ))
+        self.material.Elastic(table=((young, poisson), ))
+        self.material.Plastic(hardening=JOHNSON_COOK, table=((A, B, n, 0.0, 0.0, 0.0), ))
+        self.material.JohnsonCookDamageInitiation(table=((d1, d2, d3, 0.0, 0.0, 0.0, 0.0, ref_strain_rate), ))
+        self.material.johnsonCookDamageInitiation.DamageEvolution(type=DISPLACEMENT, table=((disp_at_failure, ), ))
+
+
+class Material:
+
+    def __init__(self, name, young, poisson):
+        self.name = name
+        model.Material(name=name)
+        model.materials[name].Elastic(table=((young, poisson), ))
+        self.material =  model.materials[name]
+
+
+
+class InteractionProperty:
+
+    def __init__(self):
+        self.name = "Interaction-Property"
+        model.ContactProperty(self.name)
+        model.interactionProperties[self.name].TangentialBehavior(formulation=ROUGH)
+        model.interactionProperties[self.name].NormalBehavior(
+            pressureOverclosure=HARD, allowSeparation=OFF, contactStiffness=DEFAULT, 
+            contactStiffnessScaleFactor=1.0, clearanceAtZeroContactPressure=0.0, 
+            stiffnessBehavior=LINEAR, constraintEnforcementMethod=PENALTY)
+
+
+
+class Step:
+
+    def __init__(self, name, previous='Initial'):
+        self.name = name
+        model.StaticStep(name=name, previous=previous)
+
+
+
+class Workpiece:
+
+    def __init__(self, length, inner, outer, p_num):
+        self.name = "Workpiece"
+        self.length = length
+        self.inner = inner
+        self.outer = outer
+        self.p_num = p_num
+
+        sketch = model.ConstrainedSketch(name=self.name + '-profile', sheetSize=0.1)
+        sketch.sketchOptions.setValues(decimalPlaces=3)
+        sketch.setPrimaryObject(option=STANDALONE)
+        sketch.CircleByCenterPerimeter(center=(0.0, 0.0), point1=(0.0, self.inner))
+        sketch.CircleByCenterPerimeter(center=(0.0, 0.0), point1=(0.0, self.outer))
+        model.Part(name=self.name, dimensionality=THREE_D, type=DEFORMABLE_BODY)
+        self.part = model.parts[self.name]
+        self.part.BaseSolidExtrude(sketch=sketch, depth=self.length)
+        sketch.unsetPrimaryObject()
+
+    def set_section(self, section):
+        region = self.part.Set(cells=self.part.cells, name='Material-region')
+        self.part.SectionAssignment(region=region, sectionName=section.name, offset=0.0, 
+            offsetType=MIDDLE_SURFACE, offsetField='', thicknessAssignment=FROM_SECTION)
+
+    def mesh(self, size=0.0015, deviationFactor=0.1, minSizeFactor=0.1):
+        self.part.setMeshControls(regions=self.part.cells, technique=SWEEP, algorithm=MEDIAL_AXIS)
+        self.part.seedPart(size=size, deviationFactor=deviationFactor, minSizeFactor=minSizeFactor)
+        self.part.generateMesh()
+
+    def partition(self):
+        for p in range(0, self.p_num):
+            try:
+                self.part.PartitionCellByPlaneThreePoints(cells=self.part.cells, 
+                    point1=(0, 0, 0), 
+                    point2=(0, 0, 1),
+                    point3=rotate(point=(0, 1, 0), axis=OZ, theta = deg(p * 360/self.p_num)))
+            except:
+                pass
+
+
+class Jaw:
+
+    def __init__(self, length, width, height):
+        self.name = "Jaw"
+        self.length = length
+        self.width = width
+        self.height = height
+        sketch = model.ConstrainedSketch(name='-profile', sheetSize=0.1) 
+        sketch.sketchOptions.setValues(decimalPlaces=3)
+        sketch.setPrimaryObject(option=STANDALONE)
+        sketch.rectangle(point1=(-0.5 * length, -0.5 * height), point2=(0.5 * length, 0.5 * height))
+        self.part = model.Part(name=self.name, dimensionality=THREE_D,  type=DEFORMABLE_BODY) # 
+        self.part.BaseSolidExtrude(sketch=sketch, depth=width)
+        sketch.unsetPrimaryObject()
+    
+    def set_section(self, section):
+        region = self.part.Set(cells=self.part.cells, name='Material-region')
+        self.part.SectionAssignment(region=region, sectionName=section.name, offset=0.0, 
+            offsetType=MIDDLE_SURFACE, offsetField='', thicknessAssignment=FROM_SECTION)
+
+    def partition(self):
+        point1 = (0, 0, 0)
+        point2 = (1, 0, 0)
+        point3 = (0, 0, 1)
+        self.part.PartitionCellByPlaneThreePoints(cells=self.part.cells, point1=point1, point2=point2, point3=point3)
+            
+        point1 = (0, 0, 0)
+        point2 = (0, 1, 0)
+        point3 = (0, 0, 1)
+        self.part.PartitionCellByPlaneThreePoints(cells=self.part.cells, point1=point1, point2=point2, point3=point3)
+
+    def mesh(self, size=0.0015, deviationFactor=0.1, minSizeFactor=0.1):
+        self.part.setMeshControls(regions=self.part.cells, technique=SWEEP, algorithm=MEDIAL_AXIS)
+        self.part.seedPart(size=size, deviationFactor=deviationFactor, minSizeFactor=minSizeFactor)
+        self.part.generateMesh()
 
 
 def __create_workpiece_partion():
@@ -204,14 +312,6 @@ def apply_jaw_force(value, c_systems):
         mdb.models['Model-1'].ConcentratedForce(name=jaw + 'load', createStepName='Step-1', 
             region=region, cf1=value, distributionType=UNIFORM, field='', localCsys=datum)
     
-    
-
-def __get_xy(radius, ref_angle):
-    x1 = radius * math.cos(math.radians(ref_angle+0.05))
-    x2 = radius * math.cos(math.radians(ref_angle-0.05))
-    y1 = radius * math.sin(math.radians(ref_angle+0.05))
-    y2 = radius * math.sin(math.radians(ref_angle-0.05))
-    return x1, y1, x2,y2
 
 def create_interaction():
     z = jaw_length/100
@@ -219,7 +319,6 @@ def create_interaction():
     for j in JAWS:
         jaw = 'Jaw-1-rad-'+str(j)
         angle = (j-1)*(360.0/len(JAWS))+90
-        x1, y1, x2, y2 = __get_xy(outer, angle)
         
         # select areas on Jaw
         a = mdb.models['Model-1'].rootAssembly
@@ -295,25 +394,6 @@ def create_jaw_BSs(c_systems):
 def create_step():
     mdb.models['Model-1'].StaticStep(name='Step-1', previous='Initial')
 
-def apply_jaw_displ(value, c_systems):
-    z = jaw_length/100
-    for j in JAWS:
-        jaw = 'Jaw-1-rad-'+str(j)
-        # JAWS=1,2,3; csys_n = 0,1,2
-        csys_n = j - 1
-        
-        angle = (j-1)*(360.0/len(JAWS))+90
-        x1, y1, x2, y2 = __get_xy(outer+jaw_height, angle)
-        
-        # select areas on Jaw
-        a = mdb.models['Model-1'].rootAssembly
-        s1 = a.instances[jaw].faces
-        side1Faces1 = s1.findAt(((x1, y1, z), ), ((x2, y2, z), ),((x1, y1, z+jaw_length/2), ),((x2, y2, z+jaw_length/2), ))
-        region=a.Set(faces=side1Faces1, name=jaw + '_displ_surf')
-        
-        datum = mdb.models['Model-1'].rootAssembly.datums[c_systems[csys_n].id]
-        mdb.models['Model-1'].DisplacementBC(name='DISPL-BC-'+str(j), createStepName='Step-1', region=region, u1=value, u2=UNSET, u3=UNSET, ur1=UNSET, ur2=UNSET, ur3=UNSET, amplitude=UNSET, fixed=OFF, distributionType=UNIFORM, fieldName='', localCsys=datum)
-
 
 def assign_section(part_name, section_name):
     p = mdb.models['Model-1'].parts[part_name]
@@ -338,95 +418,7 @@ def run_job(home):
     Job1.waitForCompletion()
 
 
-class Workpiece:
 
-    def __init__(self, length, inner, outer, p_num):
-        self.name = "Workpiece"
-        self.length = length
-        self.inner = inner
-        self.outer = outer
-        self.p_num = p_num
-
-        sketch = model.ConstrainedSketch(name=self.name + '-profile', sheetSize=0.1)
-        sketch.sketchOptions.setValues(decimalPlaces=3)
-        sketch.setPrimaryObject(option=STANDALONE)
-        sketch.CircleByCenterPerimeter(center=(0.0, 0.0), point1=(0.0, self.inner))
-        sketch.CircleByCenterPerimeter(center=(0.0, 0.0), point1=(0.0, self.outer))
-        model.Part(name=self.name, dimensionality=THREE_D, type=DEFORMABLE_BODY)
-        self.part = model.parts[self.name]
-        self.part.BaseSolidExtrude(sketch=sketch, depth=self.length)
-        sketch.unsetPrimaryObject()
-
-
-    def set_section(self, section):
-        region = self.part.Set(cells=self.part.cells, name='Material-region')
-        self.part.SectionAssignment(region=region, sectionName=section.name, offset=0.0, 
-            offsetType=MIDDLE_SURFACE, offsetField='', thicknessAssignment=FROM_SECTION)
-    
-
-    def mesh(self, size=0.0015, deviationFactor=0.1, minSizeFactor=0.1):
-        self.part.setMeshControls(regions=self.part.cells, technique=SWEEP, algorithm=MEDIAL_AXIS)
-        self.part.seedPart(size=size, deviationFactor=deviationFactor, minSizeFactor=minSizeFactor)
-        self.part.generateMesh()
-
-
-    def partition(self):
-        for p in range(0, self.p_num):
-            try:
-                self.part.PartitionCellByPlaneThreePoints(cells=self.part.cells, 
-                    point1=(0, 0, 0), 
-                    point2=(0, 0, 1),
-                    point3=rotate(point=(0, 1, 0), axis=OZ, theta = deg(p * 360/self.p_num)))
-            except:
-                pass
-
-
-class Jaw:
-
-    def __init__(self, length, width, height):
-        self.name = "Jaw"
-        self.length = length
-        self.width = width
-        self.height = height
-        sketch = model.ConstrainedSketch(name='-profile', sheetSize=0.1) 
-        sketch.sketchOptions.setValues(decimalPlaces=3)
-        sketch.setPrimaryObject(option=STANDALONE)
-        sketch.rectangle(point1=(-0.5 * length, -0.5 * height), point2=(0.5 * length, 0.5 * height))
-        self.part = model.Part(name=self.name, dimensionality=THREE_D,  type=DEFORMABLE_BODY) # 
-        self.part.BaseSolidExtrude(sketch=sketch, depth=width)
-        sketch.unsetPrimaryObject()
-    
-
-    def set_section(self, section):
-        region = self.part.Set(cells=self.part.cells, name='Material-region')
-        self.part.SectionAssignment(region=region, sectionName=section.name, offset=0.0, 
-            offsetType=MIDDLE_SURFACE, offsetField='', thicknessAssignment=FROM_SECTION)
-    
-
-    def partition(self):
-        point1 = (0, 0, 0)
-        point2 = (1, 0, 0)
-        point3 = (0, 0, 1)
-        self.part.PartitionCellByPlaneThreePoints(cells=self.part.cells, point1=point1, point2=point2, point3=point3)
-            
-        point1 = (0, 0, 0)
-        point2 = (0, 1, 0)
-        point3 = (0, 0, 1)
-        self.part.PartitionCellByPlaneThreePoints(cells=self.part.cells, point1=point1, point2=point2, point3=point3)
-
-    def mesh(self, size=0.0015, deviationFactor=0.1, minSizeFactor=0.1):
-        self.part.setMeshControls(regions=self.part.cells, technique=SWEEP, algorithm=MEDIAL_AXIS)
-        self.part.seedPart(size=size, deviationFactor=deviationFactor, minSizeFactor=minSizeFactor)
-        self.part.generateMesh()
-
-
-class Material:
-
-    def __init__(self, name, young, poisson):
-        self.name = name
-        model.Material(name=name)
-        model.materials[name].Elastic(table=((young, poisson), ))
-        self.material =  model.materials[name]
 
 
 length, outer_diameter, inner_diameter = 0.060, 0.068, 0.059

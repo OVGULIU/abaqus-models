@@ -63,6 +63,7 @@ def rotate(point, axis, theta):
     return tuple(np.dot(rotation_matrix(axis, theta), point))
     
 
+
 class MaterialExplicit:
 
     def __init__(self, name, density, young, poisson, A, B, n, d1, d2, d3, ref_strain_rate, disp_at_failure):
@@ -98,11 +99,14 @@ class InteractionProperty:
             contactStiffnessScaleFactor=1.0, clearanceAtZeroContactPressure=0.0, 
             stiffnessBehavior=LINEAR, constraintEnforcementMethod=PENALTY)
 
+
+
 class Step:
 
     def __init__(self, name, previous='Initial'):
         self.name = name
         model.StaticStep(name=name, previous=previous)
+
 
 
 class Workpiece:
@@ -124,18 +128,15 @@ class Workpiece:
         self.part.BaseSolidExtrude(sketch=sketch, depth=self.length)
         sketch.unsetPrimaryObject()
 
-
     def set_section(self, section):
         region = self.part.Set(cells=self.part.cells, name='Material-region')
         self.part.SectionAssignment(region=region, sectionName=section.name, offset=0.0, 
             offsetType=MIDDLE_SURFACE, offsetField='', thicknessAssignment=FROM_SECTION)
-    
 
     def mesh(self, size=0.0015, deviationFactor=0.1, minSizeFactor=0.1):
         self.part.setMeshControls(regions=self.part.cells, technique=SWEEP, algorithm=MEDIAL_AXIS)
         self.part.seedPart(size=size, deviationFactor=deviationFactor, minSizeFactor=minSizeFactor)
         self.part.generateMesh()
-
 
     def partition(self):
         for p in range(0, self.p_num):
@@ -146,6 +147,7 @@ class Workpiece:
                     point3=rotate(point=(0, 1, 0), axis=OZ, theta = deg(p * 360/self.p_num)))
             except:
                 pass
+
 
 
 class Jaw:
@@ -162,14 +164,12 @@ class Jaw:
         self.part = model.Part(name=self.name, dimensionality=THREE_D,  type=DEFORMABLE_BODY) # 
         self.part.BaseSolidExtrude(sketch=sketch, depth=width)
         sketch.unsetPrimaryObject()
-    
 
     def set_section(self, section):
         region = self.part.Set(cells=self.part.cells, name='Material-region')
         self.part.SectionAssignment(region=region, sectionName=section.name, offset=0.0, 
             offsetType=MIDDLE_SURFACE, offsetField='', thicknessAssignment=FROM_SECTION)
     
-
     def partition(self):
         point1 = (0, 0, 0)
         point2 = (1, 0, 0)
@@ -228,13 +228,11 @@ class Assembly:
         for a_jaw in self.assembly_jaws:
             self._apply_jaw_force(a_jaw, jaw_force)
 
-
     def _create_CSYS(self, jaw):
         jaw.CSYS = self.a.DatumCsysByThreePoints(origin=rotate((0, workpiece.outer, 0), OZ, deg(jaw.angle)), 
             point1=(0,0,0), 
             point2=rotate((1, workpiece.outer, 0), OZ, deg(jaw.angle)), 
             name=jaw.name + '_CSYS', coordSysType=CARTESIAN)
-
 
     def _create_interaction(self, jaw, region_workpiece, property):
         jaw_instance = self.a.instances[jaw.name]
@@ -263,7 +261,6 @@ class Assembly:
             thickness=ON, interactionProperty=property.name, adjustMethod=NONE, 
             initialClearance=OMIT, datumAxis=None, clearanceRegion=None)
 
-
     def _create_jaw_BSs(self, jaw):
         jaw_instance = self.a.instances[jaw.name]
         
@@ -278,7 +275,6 @@ class Assembly:
         model.DisplacementBC(name='BC-'+jaw.name, createStepName='Initial', 
             region=region, u1=UNSET, u2=SET, u3=SET, ur1=UNSET, ur2=UNSET, ur3=UNSET, 
             amplitude=UNSET, distributionType=UNIFORM, fieldName='', localCsys=datum)
-
 
     def _apply_jaw_force(self, jaw, value):
         vertices = self.a.instances[jaw.name].vertices

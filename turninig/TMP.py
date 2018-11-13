@@ -16,7 +16,27 @@ executeOnCaeStartup()
 
 Mdb()
 model = mdb.models['Model-1']
+OX = (1, 0, 0)
+OY = (0, 1, 0)
+OZ = (0, 0, 1)
 
+def N(value):
+    return value;
+
+def m(value):
+    return value
+
+def mm(value): # gets mm, returns m
+    return value * 1e-3
+
+def cm(value):
+    return value * 1e-2
+
+def rad(rad_value): # gets radians, returns radians
+    return rad_value
+
+def deg(value): # gets degrees, return radians
+    return (value * pi)/180
 
 def cart2pol(x, y):
     rho = np.sqrt(x**2 + y**2)
@@ -29,27 +49,36 @@ def pol2cart(rho, phi):
     y = rho * np.sin(phi)
     return(x, y)   
 
-def create_workpiece_part(length, inner, outer, angle, parameter):   
-    s = mdb.models['Model-1'].ConstrainedSketch(name='__profile__', sheetSize=0.1)
-    g, v, d, c = s.geometry, s.vertices, s.dimensions, s.constraints
-    s.sketchOptions.setValues(decimalPlaces=3)
-    s.setPrimaryObject(option=STANDALONE)
-    s.CircleByCenterPerimeter(center=(0.0, 0.0), point1=(0.0, inner))
-    s.CircleByCenterPerimeter(center=(0.0, 0.0), point1=(0.0, outer))
-    p = mdb.models['Model-1'].Part(name='Part', dimensionality=THREE_D, type=DEFORMABLE_BODY)
-    p = mdb.models['Model-1'].parts[workpiece.name]
-    p.BaseSolidExtrude(sketch=s, depth=length)
-    s.unsetPrimaryObject()
-    p = mdb.models['Model-1'].parts[workpiece.name]
-    session.viewports['Viewport: 1'].setValues(displayedObject=p)
-    del mdb.models['Model-1'].sketches['__profile__']
+def rotate(point, axis, theta):
+    """
+    Return the rotation matrix associated with counterclockwise rotation about
+    the given axis by theta radians.
+    """
+    def rotation_matrix(axis, theta):
+        axis = np.asarray(axis)
+        axis = axis / math.sqrt(np.dot(axis, axis))
+        a = math.cos(theta / 2.0)
+        b, c, d = -axis * math.sin(theta / 2.0)
+        aa, bb, cc, dd = a * a, b * b, c * c, d * d
+        bc, ad, ac, ab, bd, cd = b * c, a * d, a * c, a * b, b * d, c * d
+        return np.array([[aa + bb - cc - dd, 2 * (bc + ad), 2 * (bd - ac)], [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)], [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
+    return tuple(np.dot(rotation_matrix(axis, theta), point))
     
-    # __create_force_point(parameter)
-    sys.__stdout__.write("Create workpiece model"+" Length:"+str(length)+" Inner:"+str(inner)+" Outer:"+str(outer)+"\n")
-    return p.name
+
+def cart2pol(x, y):
+    rho = np.sqrt(x**2 + y**2)
+    phi = np.arctan2(y, x)
+    return(rho, math.degrees(phi))
+
+def pol2cart(rho, phi):
+    phi = math.radians(phi)
+    x = rho * np.cos(phi)
+    y = rho * np.sin(phi)
+    return(x, y)   
+
 
 def __create_workpiece_partion():
-    p = mdb.models['Model-1'].parts[workpiece.name]
+    p = mdb.models['Model-1'].parts['Workpiece']
     d1 = p.DatumAxisByPrincipalAxis(principalAxis=ZAXIS)
     v, e1 = p.vertices, p.edges
     d2 = p.DatumPlaneByThreePoints(point1=v[0], point3=v[1], point2=p.InterestingPoint(edge=e1[0], rule=CENTER))
@@ -66,8 +95,8 @@ def __create_workpiece_partion():
             pass
     
 def __create_force_point(parameter):    
-    p = mdb.models['Model-1'].parts[workpiece.name]
-    pickedEdges = mdb.models['Model-1'].parts[workpiece.name].edges.findAt((0,outer,length/2))
+    p = mdb.models['Model-1'].parts['Workpiece']
+    pickedEdges = mdb.models['Model-1'].parts['Workpiece'].edges.findAt((0,outer,length/2))
     p.PartitionEdgeByParam(edges=pickedEdges, parameter=parameter)
     
 def create_jaw_part(length, height, width):
@@ -132,16 +161,13 @@ def create_assembly(jawf, outer, length, tanf, radf, axlf, angle):
     create_property(f_coeff)# pass friction coeff
     a = mdb.models['Model-1'].rootAssembly
     a.DatumCsysByDefault(CARTESIAN)
-    p = mdb.models['Model-1'].parts[workpiece.name]
+    p = mdb.models['Model-1'].parts['Workpiece']
     a.Instance(name='Part-1', part=p, dependent=ON)
     p = mdb.models['Model-1'].parts['Jaw']
     a.Instance(name='Jaw-1', part=p, dependent=ON)
-    a.translate(instanceList=('Jaw-1', ), vector=(-jaw_width/2, 0.0, 0.0))
-    a.rotate(instanceList=('Jaw-1', ), axisPoint=(0.0, 0.0, 0.0), axisDirection=(0.0, 0.0, 1), angle=-90.0)
-    mid_d = float(inner-outer)/2+inner
-    a.translate(instanceList=('Jaw-1', ), vector=(outer, 0.0, 0.0))
-    a.rotate(instanceList=('Jaw-1', ), axisPoint=(0.0, 0.0, 0.0), axisDirection=(0.0, 0.0, 1), angle=90.0)
-    a.RadialInstancePattern(instanceList=('Jaw-1', ), point=(0.0, 0.0, 0.0), axis=(0.0, 0.0, 1.0), number=jcount, totalAngle=360.0)
+    a.rotate(instanceList=('Jaw-1', ), axisPoint=(0, 0, 0), axisDirection=OX, angle=rad(-90.0))
+    a.translate(instanceList=('Jaw-1', ), vector=(0, outer, 0.5 * jaw_height))
+    a.RadialInstancePattern(instanceList=('Jaw-1', ), point=(0, 0, 0), axis=OZ, number=3, totalAngle=-360)
     mdb.models['Model-1'].rootAssembly.features.changeKey(fromName='Jaw-1', toName='Jaw-1-rad-1')
     sys.__stdout__.write("Create assembly"+"\n") 
     # a.rotate(instanceList=('Part-1', ), axisPoint=(0.0, 0.0, 0.0), axisDirection=(0.0, 0.0, 1.0), angle = angle)
@@ -151,7 +177,7 @@ def create_assembly(jawf, outer, length, tanf, radf, axlf, angle):
     create_jaw_BSs(c_systems)
     apply_jaw_force(jawf, c_systems)
     __create_workpiece_partion()
-    mdb.models['Model-1'].parts[workpiece.name].generateMesh()
+    mdb.models['Model-1'].parts['Workpiece'].generateMesh()
     a.regenerate()
     
 def reset_force_node():
@@ -169,43 +195,15 @@ def apply_jaw_force(value, c_systems):
     for j in JAWS:
         jaw = 'Jaw-1-rad-'+str(j)
         # JAWS=1,2,3; csys_n = 0,1,2
-        csys_n = j - 1
+        csys_n = (-j+2) %3
         a = mdb.models['Model-1'].rootAssembly
         v1 = a.instances[jaw].vertices
-        verts1 = v1.getSequenceFromMask(mask=('[#2 ]', ), )
+        verts1 = v1.getSequenceFromMask(mask=('[#1 ]', ), )
         region = a.Set(vertices=verts1, name=jaw+'force_set')
         datum = mdb.models['Model-1'].rootAssembly.datums[c_systems[csys_n].id]
         mdb.models['Model-1'].ConcentratedForce(name=jaw + 'load', createStepName='Step-1', 
             region=region, cf1=value, distributionType=UNIFORM, field='', localCsys=datum)
     
-
-def create_force(tanf, radf, axlf, angle):
-    a = mdb.models['Model-1'].rootAssembly
-    d = a.datums
-    n = a.instances['Part-1'].nodes
-    force_sys = a.DatumCsysByTwoLines(CYLINDRICAL, line1=d[1].axis1, line2=d[1].axis2, name='Cutting_force_csys')
-    v = a.instances['Part-1'].vertices
-    verts = v.findAt((pol2cart(outer,90+angle)[0],pol2cart(outer,90+angle)[1], length*(1-fparameter)))
-    a.instances['Part-1'].vertices.getSequenceFromMask(mask=('[#2 ]', ), )
-    verts1 = v.getSequenceFromMask(mask=('[#2 ]', ), )
-    region = a.Set(vertices=verts1, name='Set-7')
-    datum = mdb.models['Model-1'].rootAssembly.datums[force_sys.id]
-    dct = dict((k,v) for (k,v) in [('cf1', radf), ('cf2', tanf), ('cf3', axlf)] if v !=0)
-        
-    delta = 1.0e-4
-    nodes1=[]
-    x,y = pol2cart(outer,angle)
-    z = length * (fparameter-1)
-    while not nodes1:
-        xmin, ymin, zmin = x-delta, y-delta, z-delta
-        xmax, ymax, zmax = x+delta, y+delta, z+delta 
-        nodes1 = n.getByBoundingBox(xmin, ymin, zmin, xmax, ymax, zmax)
-        delta+=delta
-    region = a.Set(nodes=nodes1, name='Force-nodes')
-    mdb.models['Model-1'].StaticStep(name='Step-2', previous='Step-1')
-    if tanf**2+ radf**2 + axlf**2 !=0:
-        mdb.models['Model-1'].ConcentratedForce(name='Cutting_force', createStepName='Step-2', 
-            region=region, distributionType=UNIFORM, field='', localCsys=datum, **dct)
     
 
 def __get_xy(radius, ref_angle):
@@ -226,14 +224,29 @@ def create_interaction():
         # select areas on Jaw
         a = mdb.models['Model-1'].rootAssembly
         s1 = a.instances[jaw].faces
-        side1Faces1 = s1.findAt(((x1, y1, z), ), ((x2, y2, z), ),((x1, y1, z+jaw_length/2), ),((x2, y2, z+jaw_length/2), ))
-        region1=a.Surface(side1Faces=side1Faces1, name=jaw + '_master_surf')
+        jaw_instance = a.instances[jaw]
+        workpiece = a.instances['Part-1']
+        jaw_angle = 360/3 * (1-j)
+        p1 = rotate((0.25 * jaw_length, outer, 0.25 * jaw_height), OZ, deg(jaw_angle))
+        p2 = rotate((-0.25 * jaw_length, outer, 0.25 * jaw_height), OZ, deg(jaw_angle))
+        p3 = rotate((0.25 * jaw_length, outer, 0.75 * jaw_height), OZ, deg(jaw_angle))
+        p4 = rotate((-0.25 * jaw_length, outer, 0.75 * jaw_height), OZ, deg(jaw_angle))
+
+        jaw_faces = jaw_instance.faces.findAt( (p1,),(p2,), (p3,), (p4,), )
+        region1=a.Surface(side1Faces=jaw_faces, name=jaw + '_master_surf')
         
         # select areas on Part
         a = mdb.models['Model-1'].rootAssembly
         s1 = a.instances['Part-1'].faces
-        side1Faces1 = s1.findAt(((x1, y1, z), ), ((x2, y2, z), ),((x1, y1, z+jaw_length/2), ),((x2, y2, z+jaw_length/2), ))
-        region2=a.Surface(side1Faces=side1Faces1, name='Part_slave_surf' + str(j))
+        
+        def translate_to_workpiece(point):
+            x, y, z = point
+            rho, phi = cart2pol(x,y)
+            x_w, y_w = pol2cart(outer, phi)
+            return x_w, y_w, z
+
+        workpiece_faces = workpiece.faces.findAt( (translate_to_workpiece(p1),),(translate_to_workpiece(p2),), (translate_to_workpiece(p3),), (translate_to_workpiece(p4),), )
+        region2=a.Surface(side1Faces=workpiece_faces, name='Part_slave_surf' + str(j))
         
         # apply interaction to Jaw and Part
         mdb.models['Model-1'].SurfaceToSurfaceContactStd(name='Int-'+str(j), 
@@ -249,7 +262,11 @@ def create_CSYS():
         a = mdb.models['Model-1'].rootAssembly
         d1 = a.instances[jaw].datums
         v1 = a.instances[jaw].vertices
-        res.append(a.DatumCsysByThreePoints(origin=d1[2], point1=(0,0,0), point2=v1[7], name = jaw + '_csys-'+str(csys_n), coordSysType=CARTESIAN))
+        jaw_angle = csys_n *360/3
+        res.append(a.DatumCsysByThreePoints(origin=rotate((0, outer, 0), OZ, deg(jaw_angle)), 
+            point1=(0,0,0), 
+            point2=rotate((1, outer, 0), OZ, deg(jaw_angle)), 
+            name=jaw + '_csys', coordSysType=CARTESIAN))
     return res
 
 def create_jaw_BSs(c_systems):
@@ -257,7 +274,7 @@ def create_jaw_BSs(c_systems):
         jaw = 'Jaw-1-rad-'+str(j)
         #starts from 0 cause c_systems is passed to function
         # JAWS=1,2,3; csys_n = 0,1,2
-        csys_n = j - 1
+        csys_n = (-j+2) %3
         a = mdb.models['Model-1'].rootAssembly
         f1 = a.instances['Jaw-1-rad-'+str(j)].faces
         #faces1 = f1.getSequenceFromMask(mask=('[#402 ]', ), )
@@ -267,6 +284,7 @@ def create_jaw_BSs(c_systems):
         # faces1 = f1.findAt((x1,y1, 0),(x2,y2, 0))
         # sys.__stdout__.write( str(faces1))
         faces1 = f1.getSequenceFromMask(mask=('[#402 ]', ), )
+        # faces1 = f1.getSequenceFromMask(mask=('[#8200 ]', ), )
         region = a.Set(faces = faces1, name='Jaw_BS_set-'+str(j))
         datum = mdb.models['Model-1'].rootAssembly.datums[c_systems[csys_n].id]
         mdb.models['Model-1'].DisplacementBC(name='BC-'+str(j), createStepName='Initial', 
@@ -363,6 +381,45 @@ class Workpiece:
                 pass
 
 
+class Jaw:
+
+    def __init__(self, length, width, height):
+        self.name = "Jaw"
+        self.length = length
+        self.width = width
+        self.height = height
+        sketch = model.ConstrainedSketch(name='-profile', sheetSize=0.1) 
+        sketch.sketchOptions.setValues(decimalPlaces=3)
+        sketch.setPrimaryObject(option=STANDALONE)
+        sketch.rectangle(point1=(-0.5 * length, -0.5 * height), point2=(0.5 * length, 0.5 * height))
+        self.part = model.Part(name=self.name, dimensionality=THREE_D,  type=DEFORMABLE_BODY) # 
+        self.part.BaseSolidExtrude(sketch=sketch, depth=width)
+        sketch.unsetPrimaryObject()
+    
+
+    def set_section(self, section):
+        region = self.part.Set(cells=self.part.cells, name='Material-region')
+        self.part.SectionAssignment(region=region, sectionName=section.name, offset=0.0, 
+            offsetType=MIDDLE_SURFACE, offsetField='', thicknessAssignment=FROM_SECTION)
+    
+
+    def partition(self):
+        point1 = (0, 0, 0)
+        point2 = (1, 0, 0)
+        point3 = (0, 0, 1)
+        self.part.PartitionCellByPlaneThreePoints(cells=self.part.cells, point1=point1, point2=point2, point3=point3)
+            
+        point1 = (0, 0, 0)
+        point2 = (0, 1, 0)
+        point3 = (0, 0, 1)
+        self.part.PartitionCellByPlaneThreePoints(cells=self.part.cells, point1=point1, point2=point2, point3=point3)
+
+    def mesh(self, size=0.0015, deviationFactor=0.1, minSizeFactor=0.1):
+        self.part.setMeshControls(regions=self.part.cells, technique=SWEEP, algorithm=MEDIAL_AXIS)
+        self.part.seedPart(size=size, deviationFactor=deviationFactor, minSizeFactor=minSizeFactor)
+        self.part.generateMesh()
+
+
 class Material:
 
     def __init__(self, name, young, poisson):
@@ -400,7 +457,9 @@ if __name__ == "__main__":
 
     # workpiece_part=create_workpiece_part(length, inner, outer, anglef, fparameter)
     workpiece_part=Workpiece(length, inner, outer, p_num=3)
-    jaw_part = create_jaw_part(jaw_width, jaw_height, jaw_length)
+    jaw_part = Jaw(jaw_length, jaw_width, jaw_height)
+    jaw_part.partition()
+    # jaw_part = create_jaw_part(jaw_width, jaw_height, jaw_length)
 
     steel = Material('Steel', jaw_young, jaw_poisson)
     steel_section = model.HomogeneousSolidSection(name='Steel-section', material=steel.name, thickness=None)
@@ -408,11 +467,11 @@ if __name__ == "__main__":
     aluminum = Material('Aluminum', workpiece_young, workpiece_poisson)
     aluminum_section = model.HomogeneousSolidSection(name='Aluminum-section', material=aluminum.name, thickness=None)
     
-    mesh_part(part_name = jaw_part, size = jaw_mesh_size, dev_factor=0.1, min_size_factor = 0.1 )
+    mesh_part(part_name = jaw_part.name, size = jaw_mesh_size, dev_factor=0.1, min_size_factor = 0.1 )
     mesh_part(part_name = workpiece_part.name, size = workpiece_mesh_size, dev_factor=0.1, min_size_factor = 0.1 )
 
     assign_section(part_name = workpiece_part.name, section_name = aluminum_section.name)
-    assign_section(part_name = jaw_part, section_name = steel_section.name)
+    assign_section(part_name = jaw_part.name, section_name = steel_section.name)
     
     create_assembly(jawf, outer, length, tanf, radf, axlf, anglef)
     a = mdb.models['Model-1'].rootAssembly

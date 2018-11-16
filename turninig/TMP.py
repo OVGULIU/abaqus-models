@@ -208,7 +208,7 @@ class Assembly:
         c_systems = self.create_CSYS()
         self.step = Step("Step-1")
         self.create_jaw_BSs(c_systems)
-        self.apply_jaw_force(jawf, c_systems)
+        self.apply_jaw_force(jaw_force, c_systems)
         self.__create_workpiece_partion()
         self.workpiece.part.generateMesh()
         self.a.regenerate()
@@ -255,10 +255,10 @@ class Assembly:
             jaw_instance = self.a.instances[jaw]
             workpiece = self.a.instances[self.workpiece.name]
             jaw_angle = 360/3 * (1-j)
-            p1 = rotate((0.25 * self.jaw.length, outer, 0.25 * self.jaw.height), OZ, deg(jaw_angle))
-            p2 = rotate((-0.25 * self.jaw.length, outer, 0.25 * self.jaw.height), OZ, deg(jaw_angle))
-            p3 = rotate((0.25 * self.jaw.length, outer, 0.75 * self.jaw.height), OZ, deg(jaw_angle))
-            p4 = rotate((-0.25 * self.jaw.length, outer, 0.75 * self.jaw.height), OZ, deg(jaw_angle))
+            p1 = rotate((0.25 * self.jaw.length, self.workpiece.outer, 0.25 * self.jaw.height), OZ, deg(jaw_angle))
+            p2 = rotate((-0.25 * self.jaw.length, self.workpiece.outer, 0.25 * self.jaw.height), OZ, deg(jaw_angle))
+            p3 = rotate((0.25 * self.jaw.length, self.workpiece.outer, 0.75 * self.jaw.height), OZ, deg(jaw_angle))
+            p4 = rotate((-0.25 * self.jaw.length, self.workpiece.outer, 0.75 * self.jaw.height), OZ, deg(jaw_angle))
 
             jaw_faces = jaw_instance.faces.findAt( (p1,),(p2,), (p3,), (p4,), )
             region1=self.a.Surface(side1Faces=jaw_faces, name=jaw + '_master_surf')
@@ -269,7 +269,7 @@ class Assembly:
             def translate_to_workpiece(point):
                 x, y, z = point
                 rho, phi = cart2pol(x,y)
-                x_w, y_w = pol2cart(outer, phi)
+                x_w, y_w = pol2cart(self.workpiece.outer, phi)
                 return x_w, y_w, z
 
             workpiece_faces = workpiece.faces.findAt( (translate_to_workpiece(p1),),(translate_to_workpiece(p2),), (translate_to_workpiece(p3),), (translate_to_workpiece(p4),), )
@@ -289,9 +289,9 @@ class Assembly:
             d1 = self.a.instances[jaw].datums
             v1 = self.a.instances[jaw].vertices
             jaw_angle = csys_n *360/3
-            res.append(self.a.DatumCsysByThreePoints(origin=rotate((0, outer, 0), OZ, deg(jaw_angle)), 
+            res.append(self.a.DatumCsysByThreePoints(origin=rotate((0, self.workpiece.outer, 0), OZ, deg(jaw_angle)), 
                 point1=(0,0,0), 
-                point2=rotate((1, outer, 0), OZ, deg(jaw_angle)), 
+                point2=rotate((1, self.workpiece.outer, 0), OZ, deg(jaw_angle)), 
                 name=jaw + '_csys', coordSysType=CARTESIAN))
         return res
 
@@ -303,8 +303,8 @@ class Assembly:
             csys_n = (-j+2) %3
             f1 = self.a.instances['Jaw-1-rad-'+str(j)].faces
             #faces1 = f1.getSequenceFromMask(mask=('[#402 ]', ), )
-            x1, y1 = pol2cart(outer+self.jaw.width/2, 360/len(JAWS)*csys_n+0.5)
-            x2, y2 = pol2cart(outer+self.jaw.width/2, 360/len(JAWS)*csys_n-0.5)
+            x1, y1 = pol2cart(self.workpiece.outer+self.jaw.width/2, 360/len(JAWS)*csys_n+0.5)
+            x2, y2 = pol2cart(self.workpiece.outer+self.jaw.width/2, 360/len(JAWS)*csys_n-0.5)
             
             # faces1 = f1.findAt((x1,y1, 0),(x2,y2, 0))
             # sys.__stdout__.write( str(faces1))
@@ -318,7 +318,8 @@ class Assembly:
 
         
 
-def run_job(home):
+def run_job():
+    home='C:\\Program Files\\SIMULIA\\Workspace'
     sys.__stdout__.write("Run job"+"\n")
     Job1 = mdb.Job(name='Job-1', model='Model-1', description='', type=ANALYSIS, 
     atTime=None, waitMinutes=0, waitHours=0, queue=None, memory=90, 

@@ -149,6 +149,61 @@ class Workpiece:
                 pass
 
 
+class SketchWorkpiece():
+
+    def __init__(self, length, inner, outer, p_num):
+        self.name = "Workpiece"
+        self.length = length
+        self.inner = inner
+        self.outer = outer
+        self.p_num = p_num
+
+        s = mdb.models['Model-1'].ConstrainedSketch(name='__profile__', sheetSize=0.1)
+        g, v, d, c = s.geometry, s.vertices, s.dimensions, s.constraints
+        s.sketchOptions.setValues(decimalPlaces=3)
+        s.setPrimaryObject(option=STANDALONE)
+        s.ConstructionLine(point1=(0.0, -0.05), point2=(0.0, 0.05))
+        s.FixedConstraint(entity=g[2])
+        session.viewports['Viewport: 1'].view.setValues(nearPlane=0.082073, 
+            farPlane=0.106489, cameraPosition=(0.0278429, 0.00694274, 0.0942809), 
+            cameraTarget=(0.0278429, 0.00694274, 0))
+        
+        points=[(0.030, 0), (0.033, 0), (0.033, 0.04), (0.040, 0.04), (0.040, 0.043),
+        (0.030, 0.043), (0.030, 0)]
+        for i,point in enumerate(points[:-1]):
+            s.Line(point1=points[i], point2=points[i+1])
+    
+        p = mdb.models['Model-1'].Part(name='Part-3', dimensionality=THREE_D, 
+            type=DEFORMABLE_BODY)
+        p = mdb.models['Model-1'].parts['Part-3']
+        p.BaseSolidRevolve(sketch=s, angle=360.0, flipRevolveDirection=OFF)
+        s.unsetPrimaryObject()
+        p = mdb.models['Model-1'].parts['Part-3']
+        self.part = p
+        session.viewports['Viewport: 1'].setValues(displayedObject=p)
+        del mdb.models['Model-1'].sketches['__profile__']
+
+
+    def set_section(self, section):
+        region = self.part.Set(cells=self.part.cells, name='Material-region')
+        self.part.SectionAssignment(region=region, sectionName=section.name, offset=0.0, 
+            offsetType=MIDDLE_SURFACE, offsetField='', thicknessAssignment=FROM_SECTION)
+
+    def mesh(self, size, dev_factor, min_size_factor):
+        self.part.setMeshControls(regions=self.part.cells, technique=SWEEP, algorithm=MEDIAL_AXIS)
+        self.part.seedPart(size=size, deviationFactor=dev_factor, minSizeFactor=min_size_factor)
+        self.part.generateMesh()
+
+    def partition(self, p_num):
+        for p in range(0, p_num):
+            try:
+                self.part.PartitionCellByPlaneThreePoints(cells=self.part.cells, 
+                    point1=(0, 0, 0), 
+                    point2=(0, 1, 0),
+                    point3=rotate(point=(1, 0, 0), axis=OY, theta = deg(30+p * 360/p_num)))
+            except:
+                pass
+
 
 
 class CustomWorkpiece:
@@ -240,8 +295,8 @@ class Assembly:
         self.a.DatumCsysByDefault(CARTESIAN)
         self.a.Instance(name=workpiece.name, part=workpiece.part, dependent=ON)
         
-        self.a.rotate(instanceList=(workpiece.name, ), axisPoint=(0, 0, 0), axisDirection=OY, angle=rad(-90.0))
-        self.a.translate(instanceList=('Workpiece', ), vector=(0.0, 0.0, 0.015-0.1))
+        self.a.rotate(instanceList=(workpiece.name, ), axisPoint=(0, 0, 0), axisDirection=OX, angle=rad(+90.0))
+        # self.a.translate(instanceList=('Workpiece', ), vector=(0.0, 0.0, 0.015-0.1))
 
         self.a.Instance(name=jaw.name, part=jaw.part, dependent=ON)
         self.a.rotate(instanceList=(jaw.name, ), axisPoint=(0, 0, 0), axisDirection=OX, angle=rad(-90.0))
@@ -263,6 +318,7 @@ class Assembly:
         # self.workpiece.mesh(size=0.002, dev_factor=0.1, min_size_factor=0.1)
         self.workpiece.part.generateMesh()
         self.a.regenerate()
+
 
     def _create_CSYS(self, jaw):    
         jaw.CSYS = self.a.DatumCsysByThreePoints(origin=rotate((0, workpiece.outer, 0), OZ, deg(jaw.angle)), 
@@ -349,7 +405,8 @@ if __name__ == "__main__":
     aluminum_section = model.HomogeneousSolidSection(name='Aluminum-section', material=aluminum.name, thickness=None)
     
     # workpiece = Workpiece(length=mm(60), inner=mm(59/2), outer=mm(68/2), p_num=jaw_num)
-    workpiece = CustomWorkpiece('D:/ereme/GoogleDrive/PostGraduate/ZhAD/parts/meshed/part1.STEP', outer_radius=0.046)
+    # workpiece = CustomWorkpiece('D:/ereme/GoogleDrive/PostGraduate/ZhAD/parts/meshed/part1.STEP', outer_radius=0.046)
+    workpiece = SketchWorkpiece(length=mm(60), inner=mm(59/2), outer=0.033, p_num=jaw_num)
     workpiece.set_section(aluminum_section)
     workpiece.mesh(size=0.002, dev_factor=0.1, min_size_factor = 0.1 )
 

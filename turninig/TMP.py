@@ -343,16 +343,9 @@ def run_job(home):
     Job1.waitForCompletion()
 
 
-
-
-
-length, outer_diameter, inner_diameter = 0.060, 0.068, 0.059
-outer, inner = outer_diameter/2, inner_diameter/2
-fparameter = 0.6 # axial position of force (?)
 jcount = 3
 JAWS = range(1,jcount+1)
 
-jawf = 1000
 f_coeff = 0.3
 
 workpiece_mesh_size = 0.002
@@ -377,7 +370,7 @@ if __name__ == "__main__":
     jaw.mesh(size = 0.0015, dev_factor=0.1, min_size_factor = 0.1 )
 
     assembly = Assembly(workpiece=workpiece, jaw=jaw)
-    assembly.create_assembly(jawf, outer, length)
+    assembly.create_assembly(jawf=N(1000), outer=mm(34), length=mm(60))
     a = mdb.models['Model-1'].rootAssembly
     session.viewports['Viewport: 1'].setValues(displayedObject=a)
     session.viewports['Viewport: 1'].view.setValues(session.views['Iso'])

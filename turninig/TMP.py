@@ -138,32 +138,15 @@ class Workpiece:
         self.part.seedPart(size=size, deviationFactor=dev_factor, minSizeFactor=min_size_factor)
         self.part.generateMesh()
 
-    def partition(self):
-        for p in range(0, self.p_num):
+    def partition(self, p_num):
+        for p in range(0, p_num):
             try:
                 self.part.PartitionCellByPlaneThreePoints(cells=self.part.cells, 
                     point1=(0, 0, 0), 
                     point2=(0, 0, 1),
-                    point3=rotate(point=(0, 1, 0), axis=OZ, theta = deg(p * 360/self.p_num)))
+                    point3=rotate(point=(0, 1, 0), axis=OZ, theta = deg(p * 360/p_num)))
             except:
                 pass
-
-    def partition_n(self):
-        p = self.part
-        d1 = p.DatumAxisByPrincipalAxis(principalAxis=ZAXIS)
-        v, e1 = p.vertices, p.edges
-        d2 = p.DatumPlaneByThreePoints(point1=v[0], point3=v[1], point2=p.InterestingPoint(edge=e1[0], rule=CENTER))
-        d = p.datums
-        for j in JAWS:
-            jaw = 'Jaw-rad-'+str(j)
-            # JAWS=1,2,3; n = 0,1,2
-            n = j - 1
-            new_d = p.DatumPlaneByRotation(plane=d[d2.id], axis=d[d1.id], angle=n*360/len(JAWS))
-            try:
-                p.PartitionCellByDatumPlane(datumPlane=d[new_d.id], cells=p.cells)
-                print('Ok')
-            except:
-                print('Not Ok')  
 
 
 
@@ -241,7 +224,8 @@ class Assembly:
         for a_jaw in self.assembly_jaws:
             self._apply_jaw_force(a_jaw, jaw_force)
 
-        self.workpiece.partition_n()
+        self.workpiece.partition(jaw_num)
+        # self.workpiece.mesh(size=0.002, dev_factor=0.1, min_size_factor=0.1)
         self.workpiece.part.generateMesh()
         self.a.regenerate()
 
@@ -331,16 +315,16 @@ if __name__ == "__main__":
     
     workpiece = Workpiece(length=mm(60), inner=mm(59/2), outer=mm(68/2), p_num=jaw_num)
     workpiece.set_section(aluminum_section)
-    # workpiece.partition_n()
     workpiece.mesh(size=0.002, dev_factor=0.1, min_size_factor = 0.1 )
 
 
     jaw = Jaw(length=mm(15), width=mm(15), height=mm(15))
     jaw.set_section(steel_section)
     jaw.partition()
-    jaw.mesh(size = 0.0015, dev_factor=0.1, min_size_factor = 0.1 )
+    jaw.mesh(size=0.0015, dev_factor=0.1, min_size_factor=0.1)
 
     assembly = Assembly(workpiece=workpiece, jaw=jaw, jaw_num=jaw_num, jaw_force=N(1000))
+
     a = mdb.models['Model-1'].rootAssembly
     session.viewports['Viewport: 1'].setValues(displayedObject=a)
     session.viewports['Viewport: 1'].view.setValues(session.views['Iso'])

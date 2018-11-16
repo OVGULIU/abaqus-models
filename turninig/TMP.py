@@ -213,8 +213,10 @@ class Assembly:
         self.a.translate(instanceList=(jaw.name, ), vector=(0, workpiece.outer, 0.5 * jaw.height))
         self.a.RadialInstancePattern(instanceList=(jaw.name, ), point=(0, 0, 0), axis=OZ, number=jaw_num, totalAngle=-360)
         self.a.features.changeKey(fromName=jaw.name, toName=jaw.name+'-rad-1')
+        self.assembly_jaws = [Assembly.Jaw(i, 'Jaw-rad-'+str(i)) for i in range(1, 1+jaw_num)]
         self.interactionProperty = InteractionProperty()
-        self.create_interaction()
+        for a_jaw in self.assembly_jaws:
+            self._create_interaction(a_jaw) 
         c_systems = self.create_CSYS()
         self.step = Step("Step-1")
         self.create_jaw_BSs(c_systems)
@@ -222,6 +224,34 @@ class Assembly:
         self.__create_workpiece_partion()
         self.workpiece.part.generateMesh()
         self.a.regenerate()
+
+    def _create_interaction(self, jaw):
+        jaw_instance = self.a.instances[jaw.name]
+        workpiece = self.a.instances[self.workpiece.name]
+        p1 = rotate((0.25 * self.jaw.length, self.workpiece.outer, 0.25 * self.jaw.height), OZ, deg(jaw.angle))
+        p2 = rotate((-0.25 * self.jaw.length, self.workpiece.outer, 0.25 * self.jaw.height), OZ, deg(jaw.angle))
+        p3 = rotate((0.25 * self.jaw.length, self.workpiece.outer, 0.75 * self.jaw.height), OZ, deg(jaw.angle))
+        p4 = rotate((-0.25 * self.jaw.length, self.workpiece.outer, 0.75 * self.jaw.height), OZ, deg(jaw.angle))
+
+        jaw_faces = jaw_instance.faces.findAt( (p1,),(p2,), (p3,), (p4,), )
+        
+        region_jaw=self.a.Surface(side1Faces=jaw_faces, name=jaw.name + '_master_surf')       
+        
+        # create workpiece master region   
+        def translate_to_workpiece(point):
+            x, y, z = point
+            rho, phi = cart2pol(x,y)
+            x_w, y_w = pol2cart(self.workpiece.outer, phi)
+            return x_w, y_w, z
+
+        workpiece_faces = workpiece.faces.findAt( (translate_to_workpiece(p1),),(translate_to_workpiece(p2),), (translate_to_workpiece(p3),), (translate_to_workpiece(p4),), )
+        region_workpiece=self.a.Surface(side1Faces=workpiece_faces, name=jaw.name + '_slave_surf')
+
+        model.SurfaceToSurfaceContactStd(name='Interaction-'+jaw.name, 
+            createStepName='Initial', master=region_jaw, slave=region_workpiece, sliding=FINITE, 
+            thickness=ON, interactionProperty=self.interactionProperty.name, adjustMethod=NONE, 
+            initialClearance=OMIT, datumAxis=None, clearanceRegion=None)
+
 
     def __create_workpiece_partion(self):
         p = workpiece.part
@@ -236,8 +266,9 @@ class Assembly:
             new_d = p.DatumPlaneByRotation(plane=d[d2.id], axis=d[d1.id], angle=n*360/len(JAWS))
             try:
                 p.PartitionCellByDatumPlane(datumPlane=d[new_d.id], cells=p.cells)
+                print('Ok')
             except:
-                pass       
+                print('Not Ok')  
 
     def apply_jaw_force(self,value, c_systems):
         for j in JAWS:
@@ -251,46 +282,6 @@ class Assembly:
             model.ConcentratedForce(name=jaw + 'load', createStepName=self.step.name, 
                 region=region, cf1=value, distributionType=UNIFORM, field='', localCsys=datum)
         
-
-    def create_interaction(self):
-        z = self.jaw.length/100
-        # mid_d = float(inner-outer)/2+inner
-        for j in JAWS:
-            jaw = 'Jaw-rad-'+str(j)
-            angle = (j-1)*(360.0/len(JAWS))+90
-            
-            # select areas on Jaw
-            
-            s1 = self.a.instances[jaw].faces
-            jaw_instance = self.a.instances[jaw]
-            workpiece = self.a.instances[self.workpiece.name]
-            jaw_angle = 360/3 * (1-j)
-            p1 = rotate((0.25 * self.jaw.length, self.workpiece.outer, 0.25 * self.jaw.height), OZ, deg(jaw_angle))
-            p2 = rotate((-0.25 * self.jaw.length, self.workpiece.outer, 0.25 * self.jaw.height), OZ, deg(jaw_angle))
-            p3 = rotate((0.25 * self.jaw.length, self.workpiece.outer, 0.75 * self.jaw.height), OZ, deg(jaw_angle))
-            p4 = rotate((-0.25 * self.jaw.length, self.workpiece.outer, 0.75 * self.jaw.height), OZ, deg(jaw_angle))
-
-            jaw_faces = jaw_instance.faces.findAt( (p1,),(p2,), (p3,), (p4,), )
-            region1=self.a.Surface(side1Faces=jaw_faces, name=jaw + '_master_surf')
-            
-            # select areas on Part
-            s1 = self.a.instances[self.workpiece.name].faces
-            
-            def translate_to_workpiece(point):
-                x, y, z = point
-                rho, phi = cart2pol(x,y)
-                x_w, y_w = pol2cart(self.workpiece.outer, phi)
-                return x_w, y_w, z
-
-            workpiece_faces = workpiece.faces.findAt( (translate_to_workpiece(p1),),(translate_to_workpiece(p2),), (translate_to_workpiece(p3),), (translate_to_workpiece(p4),), )
-            region2=self.a.Surface(side1Faces=workpiece_faces, name='Part_slave_surf' + str(j))
-            
-            # apply interaction to Jaw and Part
-            model.SurfaceToSurfaceContactStd(name='Int-'+str(j), 
-                createStepName='Initial', master=region1, slave=region2, sliding=FINITE, 
-                thickness=ON, interactionProperty=self.interactionProperty.name, adjustMethod=NONE, 
-                initialClearance=OMIT, datumAxis=None, clearanceRegion=None)
-
     def create_CSYS(self):
         res=[]
         for j in JAWS:

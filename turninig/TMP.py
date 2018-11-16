@@ -190,29 +190,9 @@ class Jaw:
 
 class Assembly:
 
-    def __init__(self, workpiece, jaw):
+    def __init__(self, workpiece, jaw, jawf):
         self.workpiece = workpiece
         self.jaw = jaw
-
-    def __create_workpiece_partion(self):
-        p = workpiece.part
-        d1 = p.DatumAxisByPrincipalAxis(principalAxis=ZAXIS)
-        v, e1 = p.vertices, p.edges
-        d2 = p.DatumPlaneByThreePoints(point1=v[0], point3=v[1], point2=p.InterestingPoint(edge=e1[0], rule=CENTER))
-        # d2 = p.DatumPlaneByThreePoints(point2=(0,0,0), point3=(0,0,0.1), point1=(0,0.1,0.1))
-        d = p.datums
-        for j in JAWS:
-            jaw = 'Jaw-1-rad-'+str(j)
-            # JAWS=1,2,3; n = 0,1,2
-            n = j - 1
-            new_d = p.DatumPlaneByRotation(plane=d[d2.id], axis=d[d1.id], angle=n*360/len(JAWS))
-            try:
-                p.PartitionCellByDatumPlane(datumPlane=d[new_d.id], cells=p.cells)
-            except:
-                pass
-        
-
-    def create_assembly(self, jawf, outer, length):
         self.interaction_property = InteractionProperty()
         a = mdb.models['Model-1'].rootAssembly
         a.DatumCsysByDefault(CARTESIAN)
@@ -221,7 +201,7 @@ class Assembly:
         p = mdb.models['Model-1'].parts['Jaw']
         a.Instance(name='Jaw-1', part=p, dependent=ON)
         a.rotate(instanceList=('Jaw-1', ), axisPoint=(0, 0, 0), axisDirection=OX, angle=rad(-90.0))
-        a.translate(instanceList=('Jaw-1', ), vector=(0, outer, 0.5 * self.jaw.height))
+        a.translate(instanceList=('Jaw-1', ), vector=(0, self.workpiece.outer, 0.5 * self.jaw.height))
         a.RadialInstancePattern(instanceList=('Jaw-1', ), point=(0, 0, 0), axis=OZ, number=3, totalAngle=-360)
         mdb.models['Model-1'].rootAssembly.features.changeKey(fromName='Jaw-1', toName='Jaw-1-rad-1')
         sys.__stdout__.write("Create assembly"+"\n") 
@@ -233,7 +213,22 @@ class Assembly:
         self.__create_workpiece_partion()
         mdb.models['Model-1'].parts['Workpiece'].generateMesh()
         a.regenerate()
-        
+
+    def __create_workpiece_partion(self):
+        p = workpiece.part
+        d1 = p.DatumAxisByPrincipalAxis(principalAxis=ZAXIS)
+        v, e1 = p.vertices, p.edges
+        d2 = p.DatumPlaneByThreePoints(point1=v[0], point3=v[1], point2=p.InterestingPoint(edge=e1[0], rule=CENTER))
+        d = p.datums
+        for j in JAWS:
+            jaw = 'Jaw-1-rad-'+str(j)
+            # JAWS=1,2,3; n = 0,1,2
+            n = j - 1
+            new_d = p.DatumPlaneByRotation(plane=d[d2.id], axis=d[d1.id], angle=n*360/len(JAWS))
+            try:
+                p.PartitionCellByDatumPlane(datumPlane=d[new_d.id], cells=p.cells)
+            except:
+                pass       
 
     def apply_jaw_force(self,value, c_systems):
         for j in JAWS:
@@ -344,11 +339,6 @@ def run_job(home):
 jcount = 3
 JAWS = range(1,jcount+1)
 
-f_coeff = 0.3
-
-workpiece_mesh_size = 0.002
-
-
 if __name__ == "__main__":
     jaw_num = 3
     steel = Material('Steel', 210e15, 0.29)
@@ -367,8 +357,7 @@ if __name__ == "__main__":
     jaw.partition()
     jaw.mesh(size = 0.0015, dev_factor=0.1, min_size_factor = 0.1 )
 
-    assembly = Assembly(workpiece=workpiece, jaw=jaw)
-    assembly.create_assembly(jawf=N(1000), outer=mm(34), length=mm(60))
+    assembly = Assembly(workpiece=workpiece, jaw=jaw, jawf=N(1000))
     a = mdb.models['Model-1'].rootAssembly
     session.viewports['Viewport: 1'].setValues(displayedObject=a)
     session.viewports['Viewport: 1'].view.setValues(session.views['Iso'])

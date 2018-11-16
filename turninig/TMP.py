@@ -148,6 +148,23 @@ class Workpiece:
             except:
                 pass
 
+    def partition_n(self):
+        p = self.part
+        d1 = p.DatumAxisByPrincipalAxis(principalAxis=ZAXIS)
+        v, e1 = p.vertices, p.edges
+        d2 = p.DatumPlaneByThreePoints(point1=v[0], point3=v[1], point2=p.InterestingPoint(edge=e1[0], rule=CENTER))
+        d = p.datums
+        for j in JAWS:
+            jaw = 'Jaw-rad-'+str(j)
+            # JAWS=1,2,3; n = 0,1,2
+            n = j - 1
+            new_d = p.DatumPlaneByRotation(plane=d[d2.id], axis=d[d1.id], angle=n*360/len(JAWS))
+            try:
+                p.PartitionCellByDatumPlane(datumPlane=d[new_d.id], cells=p.cells)
+                print('Ok')
+            except:
+                print('Not Ok')  
+
 
 
 class Jaw:
@@ -224,7 +241,7 @@ class Assembly:
         for a_jaw in self.assembly_jaws:
             self._apply_jaw_force(a_jaw, jaw_force)
 
-        self.__create_workpiece_partion()
+        self.workpiece.partition_n()
         self.workpiece.part.generateMesh()
         self.a.regenerate()
 
@@ -260,24 +277,6 @@ class Assembly:
             createStepName='Initial', master=region_jaw, slave=region_workpiece, sliding=FINITE, 
             thickness=ON, interactionProperty=self.interactionProperty.name, adjustMethod=NONE, 
             initialClearance=OMIT, datumAxis=None, clearanceRegion=None)
-
-
-    def __create_workpiece_partion(self):
-        p = workpiece.part
-        d1 = p.DatumAxisByPrincipalAxis(principalAxis=ZAXIS)
-        v, e1 = p.vertices, p.edges
-        d2 = p.DatumPlaneByThreePoints(point1=v[0], point3=v[1], point2=p.InterestingPoint(edge=e1[0], rule=CENTER))
-        d = p.datums
-        for j in JAWS:
-            jaw = 'Jaw-rad-'+str(j)
-            # JAWS=1,2,3; n = 0,1,2
-            n = j - 1
-            new_d = p.DatumPlaneByRotation(plane=d[d2.id], axis=d[d1.id], angle=n*360/len(JAWS))
-            try:
-                p.PartitionCellByDatumPlane(datumPlane=d[new_d.id], cells=p.cells)
-                print('Ok')
-            except:
-                print('Not Ok')  
 
     def _create_jaw_BSs(self, jaw):
         jaw_instance = self.a.instances[jaw.name]
@@ -332,6 +331,7 @@ if __name__ == "__main__":
     
     workpiece = Workpiece(length=mm(60), inner=mm(59/2), outer=mm(68/2), p_num=jaw_num)
     workpiece.set_section(aluminum_section)
+    # workpiece.partition_n()
     workpiece.mesh(size=0.002, dev_factor=0.1, min_size_factor = 0.1 )
 
 

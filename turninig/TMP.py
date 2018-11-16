@@ -68,8 +68,8 @@ class MaterialExplicit:
 
     def __init__(self, name, density, young, poisson, A, B, n, d1, d2, d3, ref_strain_rate, disp_at_failure):
         self.name = name
-        mdb.models['Model-1'].Material(name=name)
-        self.material = mdb.models['Model-1'].materials[name]
+        model.Material(name=name)
+        self.material = model.materials[name]
         self.material.Density(table=((density, ), ))
         self.material.Elastic(table=((young, poisson), ))
         self.material.Plastic(hardening=JOHNSON_COOK, table=((A, B, n, 0.0, 0.0, 0.0), ))
@@ -190,29 +190,28 @@ class Jaw:
 
 class Assembly:
 
-    def __init__(self, workpiece, jaw, jawf):
+    def __init__(self, workpiece, jaw, jaw_force):
         self.workpiece = workpiece
         self.jaw = jaw
-        self.interaction_property = InteractionProperty()
-        a = mdb.models['Model-1'].rootAssembly
-        a.DatumCsysByDefault(CARTESIAN)
-        p = mdb.models['Model-1'].parts['Workpiece']
-        a.Instance(name='Part-1', part=p, dependent=ON)
-        p = mdb.models['Model-1'].parts['Jaw']
-        a.Instance(name='Jaw-1', part=p, dependent=ON)
-        a.rotate(instanceList=('Jaw-1', ), axisPoint=(0, 0, 0), axisDirection=OX, angle=rad(-90.0))
-        a.translate(instanceList=('Jaw-1', ), vector=(0, self.workpiece.outer, 0.5 * self.jaw.height))
-        a.RadialInstancePattern(instanceList=('Jaw-1', ), point=(0, 0, 0), axis=OZ, number=3, totalAngle=-360)
-        mdb.models['Model-1'].rootAssembly.features.changeKey(fromName='Jaw-1', toName='Jaw-1-rad-1')
+        self.jaw_force = jaw_force
+        self.a = model.rootAssembly    
+        self.a.DatumCsysByDefault(CARTESIAN)
+        self.a.Instance(name=workpiece.name, part=workpiece.part, dependent=ON)
+        self.a.Instance(name='Jaw-1', part=jaw.part, dependent=ON)
+        self.a.rotate(instanceList=('Jaw-1', ), axisPoint=(0, 0, 0), axisDirection=OX, angle=rad(-90.0))
+        self.a.translate(instanceList=('Jaw-1', ), vector=(0, self.workpiece.outer, 0.5 * self.jaw.height))
+        self.a.RadialInstancePattern(instanceList=('Jaw-1', ), point=(0, 0, 0), axis=OZ, number=3, totalAngle=-360)
+        self.a.features.changeKey(fromName='Jaw-1', toName='Jaw-1-rad-1')
         sys.__stdout__.write("Create assembly"+"\n") 
+        self.interaction_property = InteractionProperty()
         self.create_interaction()
         c_systems = self.create_CSYS()
         self.step = Step("Step-1")
         self.create_jaw_BSs(c_systems)
         self.apply_jaw_force(jawf, c_systems)
         self.__create_workpiece_partion()
-        mdb.models['Model-1'].parts['Workpiece'].generateMesh()
-        a.regenerate()
+        self.workpiece.part.generateMesh()
+        self.a.regenerate()
 
     def __create_workpiece_partion(self):
         p = workpiece.part
@@ -235,12 +234,11 @@ class Assembly:
             jaw = 'Jaw-1-rad-'+str(j)
             # JAWS=1,2,3; csys_n = 0,1,2
             csys_n = (-j+2) %3
-            a = mdb.models['Model-1'].rootAssembly
-            v1 = a.instances[jaw].vertices
+            v1 = self.a.instances[jaw].vertices
             verts1 = v1.getSequenceFromMask(mask=('[#1 ]', ), )
-            region = a.Set(vertices=verts1, name=jaw+'force_set')
-            datum = mdb.models['Model-1'].rootAssembly.datums[c_systems[csys_n].id]
-            mdb.models['Model-1'].ConcentratedForce(name=jaw + 'load', createStepName=self.step.name, 
+            region = self.a.Set(vertices=verts1, name=jaw+'force_set')
+            datum = self.a.datums[c_systems[csys_n].id]
+            model.ConcentratedForce(name=jaw + 'load', createStepName=self.step.name, 
                 region=region, cf1=value, distributionType=UNIFORM, field='', localCsys=datum)
         
 
@@ -252,10 +250,10 @@ class Assembly:
             angle = (j-1)*(360.0/len(JAWS))+90
             
             # select areas on Jaw
-            a = mdb.models['Model-1'].rootAssembly
-            s1 = a.instances[jaw].faces
-            jaw_instance = a.instances[jaw]
-            workpiece = a.instances['Part-1']
+            
+            s1 = self.a.instances[jaw].faces
+            jaw_instance = self.a.instances[jaw]
+            workpiece = self.a.instances[self.workpiece.name]
             jaw_angle = 360/3 * (1-j)
             p1 = rotate((0.25 * self.jaw.length, outer, 0.25 * self.jaw.height), OZ, deg(jaw_angle))
             p2 = rotate((-0.25 * self.jaw.length, outer, 0.25 * self.jaw.height), OZ, deg(jaw_angle))
@@ -263,11 +261,10 @@ class Assembly:
             p4 = rotate((-0.25 * self.jaw.length, outer, 0.75 * self.jaw.height), OZ, deg(jaw_angle))
 
             jaw_faces = jaw_instance.faces.findAt( (p1,),(p2,), (p3,), (p4,), )
-            region1=a.Surface(side1Faces=jaw_faces, name=jaw + '_master_surf')
+            region1=self.a.Surface(side1Faces=jaw_faces, name=jaw + '_master_surf')
             
             # select areas on Part
-            a = mdb.models['Model-1'].rootAssembly
-            s1 = a.instances['Part-1'].faces
+            s1 = self.a.instances[self.workpiece.name].faces
             
             def translate_to_workpiece(point):
                 x, y, z = point
@@ -276,10 +273,10 @@ class Assembly:
                 return x_w, y_w, z
 
             workpiece_faces = workpiece.faces.findAt( (translate_to_workpiece(p1),),(translate_to_workpiece(p2),), (translate_to_workpiece(p3),), (translate_to_workpiece(p4),), )
-            region2=a.Surface(side1Faces=workpiece_faces, name='Part_slave_surf' + str(j))
+            region2=self.a.Surface(side1Faces=workpiece_faces, name='Part_slave_surf' + str(j))
             
             # apply interaction to Jaw and Part
-            mdb.models['Model-1'].SurfaceToSurfaceContactStd(name='Int-'+str(j), 
+            model.SurfaceToSurfaceContactStd(name='Int-'+str(j), 
                 createStepName='Initial', master=region1, slave=region2, sliding=FINITE, 
                 thickness=ON, interactionProperty=self.interaction_property.name, adjustMethod=NONE, 
                 initialClearance=OMIT, datumAxis=None, clearanceRegion=None)
@@ -289,11 +286,10 @@ class Assembly:
         for j in JAWS:
             jaw = 'Jaw-1-rad-'+str(j)
             csys_n = j+1
-            a = mdb.models['Model-1'].rootAssembly
-            d1 = a.instances[jaw].datums
-            v1 = a.instances[jaw].vertices
+            d1 = self.a.instances[jaw].datums
+            v1 = self.a.instances[jaw].vertices
             jaw_angle = csys_n *360/3
-            res.append(a.DatumCsysByThreePoints(origin=rotate((0, outer, 0), OZ, deg(jaw_angle)), 
+            res.append(self.a.DatumCsysByThreePoints(origin=rotate((0, outer, 0), OZ, deg(jaw_angle)), 
                 point1=(0,0,0), 
                 point2=rotate((1, outer, 0), OZ, deg(jaw_angle)), 
                 name=jaw + '_csys', coordSysType=CARTESIAN))
@@ -305,8 +301,7 @@ class Assembly:
             #starts from 0 cause c_systems is passed to function
             # JAWS=1,2,3; csys_n = 0,1,2
             csys_n = (-j+2) %3
-            a = mdb.models['Model-1'].rootAssembly
-            f1 = a.instances['Jaw-1-rad-'+str(j)].faces
+            f1 = self.a.instances['Jaw-1-rad-'+str(j)].faces
             #faces1 = f1.getSequenceFromMask(mask=('[#402 ]', ), )
             x1, y1 = pol2cart(outer+self.jaw.width/2, 360/len(JAWS)*csys_n+0.5)
             x2, y2 = pol2cart(outer+self.jaw.width/2, 360/len(JAWS)*csys_n-0.5)
@@ -315,9 +310,9 @@ class Assembly:
             # sys.__stdout__.write( str(faces1))
             faces1 = f1.getSequenceFromMask(mask=('[#402 ]', ), )
             # faces1 = f1.getSequenceFromMask(mask=('[#8200 ]', ), )
-            region = a.Set(faces = faces1, name='Jaw_BS_set-'+str(j))
-            datum = mdb.models['Model-1'].rootAssembly.datums[c_systems[csys_n].id]
-            mdb.models['Model-1'].DisplacementBC(name='BC-'+str(j), createStepName='Initial', 
+            region = self.a.Set(faces = faces1, name='Jaw_BS_set-'+str(j))
+            datum = self.a.datums[c_systems[csys_n].id]
+            model.DisplacementBC(name='BC-'+str(j), createStepName='Initial', 
                 region=region, u1=UNSET, u2=SET, u3=SET, ur1=UNSET, ur2=UNSET, ur3=UNSET, 
                 amplitude=UNSET, distributionType=UNIFORM, fieldName='', localCsys=datum)
 
@@ -357,7 +352,7 @@ if __name__ == "__main__":
     jaw.partition()
     jaw.mesh(size = 0.0015, dev_factor=0.1, min_size_factor = 0.1 )
 
-    assembly = Assembly(workpiece=workpiece, jaw=jaw, jawf=N(1000))
+    assembly = Assembly(workpiece=workpiece, jaw=jaw, jaw_force=N(1000))
     a = mdb.models['Model-1'].rootAssembly
     session.viewports['Viewport: 1'].setValues(displayedObject=a)
     session.viewports['Viewport: 1'].view.setValues(session.views['Iso'])

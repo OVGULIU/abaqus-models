@@ -189,21 +189,31 @@ class Jaw:
 
 
 class Assembly:
+    
+    class Jaw:
 
-    def __init__(self, workpiece, jaw, jaw_force):
+        def __init__(self, index, name):
+            self.index = index
+            self.name = name
+            self.angle = 360/3 * (1-index)
+            self.CSYS = None
+
+        def __hash__(self):
+            return self.index
+
+    def __init__(self, workpiece, jaw, jaw_num, jaw_force):
         self.workpiece = workpiece
         self.jaw = jaw
         self.jaw_force = jaw_force
         self.a = model.rootAssembly    
         self.a.DatumCsysByDefault(CARTESIAN)
         self.a.Instance(name=workpiece.name, part=workpiece.part, dependent=ON)
-        self.a.Instance(name='Jaw-1', part=jaw.part, dependent=ON)
-        self.a.rotate(instanceList=('Jaw-1', ), axisPoint=(0, 0, 0), axisDirection=OX, angle=rad(-90.0))
-        self.a.translate(instanceList=('Jaw-1', ), vector=(0, self.workpiece.outer, 0.5 * self.jaw.height))
-        self.a.RadialInstancePattern(instanceList=('Jaw-1', ), point=(0, 0, 0), axis=OZ, number=3, totalAngle=-360)
-        self.a.features.changeKey(fromName='Jaw-1', toName='Jaw-1-rad-1')
-        sys.__stdout__.write("Create assembly"+"\n") 
-        self.interaction_property = InteractionProperty()
+        self.a.Instance(name=jaw.name, part=jaw.part, dependent=ON)
+        self.a.rotate(instanceList=(jaw.name, ), axisPoint=(0, 0, 0), axisDirection=OX, angle=rad(-90.0))
+        self.a.translate(instanceList=(jaw.name, ), vector=(0, workpiece.outer, 0.5 * jaw.height))
+        self.a.RadialInstancePattern(instanceList=(jaw.name, ), point=(0, 0, 0), axis=OZ, number=jaw_num, totalAngle=-360)
+        self.a.features.changeKey(fromName=jaw.name, toName=jaw.name+'-rad-1')
+        self.interactionProperty = InteractionProperty()
         self.create_interaction()
         c_systems = self.create_CSYS()
         self.step = Step("Step-1")
@@ -220,7 +230,7 @@ class Assembly:
         d2 = p.DatumPlaneByThreePoints(point1=v[0], point3=v[1], point2=p.InterestingPoint(edge=e1[0], rule=CENTER))
         d = p.datums
         for j in JAWS:
-            jaw = 'Jaw-1-rad-'+str(j)
+            jaw = 'Jaw-rad-'+str(j)
             # JAWS=1,2,3; n = 0,1,2
             n = j - 1
             new_d = p.DatumPlaneByRotation(plane=d[d2.id], axis=d[d1.id], angle=n*360/len(JAWS))
@@ -231,7 +241,7 @@ class Assembly:
 
     def apply_jaw_force(self,value, c_systems):
         for j in JAWS:
-            jaw = 'Jaw-1-rad-'+str(j)
+            jaw = 'Jaw-rad-'+str(j)
             # JAWS=1,2,3; csys_n = 0,1,2
             csys_n = (-j+2) %3
             v1 = self.a.instances[jaw].vertices
@@ -246,7 +256,7 @@ class Assembly:
         z = self.jaw.length/100
         # mid_d = float(inner-outer)/2+inner
         for j in JAWS:
-            jaw = 'Jaw-1-rad-'+str(j)
+            jaw = 'Jaw-rad-'+str(j)
             angle = (j-1)*(360.0/len(JAWS))+90
             
             # select areas on Jaw
@@ -278,13 +288,13 @@ class Assembly:
             # apply interaction to Jaw and Part
             model.SurfaceToSurfaceContactStd(name='Int-'+str(j), 
                 createStepName='Initial', master=region1, slave=region2, sliding=FINITE, 
-                thickness=ON, interactionProperty=self.interaction_property.name, adjustMethod=NONE, 
+                thickness=ON, interactionProperty=self.interactionProperty.name, adjustMethod=NONE, 
                 initialClearance=OMIT, datumAxis=None, clearanceRegion=None)
 
     def create_CSYS(self):
         res=[]
         for j in JAWS:
-            jaw = 'Jaw-1-rad-'+str(j)
+            jaw = 'Jaw-rad-'+str(j)
             csys_n = j+1
             d1 = self.a.instances[jaw].datums
             v1 = self.a.instances[jaw].vertices
@@ -297,11 +307,11 @@ class Assembly:
 
     def create_jaw_BSs(self,c_systems):
         for j in JAWS:
-            jaw = 'Jaw-1-rad-'+str(j)
+            jaw = 'Jaw-rad-'+str(j)
             #starts from 0 cause c_systems is passed to function
             # JAWS=1,2,3; csys_n = 0,1,2
             csys_n = (-j+2) %3
-            f1 = self.a.instances['Jaw-1-rad-'+str(j)].faces
+            f1 = self.a.instances['Jaw-rad-'+str(j)].faces
             #faces1 = f1.getSequenceFromMask(mask=('[#402 ]', ), )
             x1, y1 = pol2cart(self.workpiece.outer+self.jaw.width/2, 360/len(JAWS)*csys_n+0.5)
             x2, y2 = pol2cart(self.workpiece.outer+self.jaw.width/2, 360/len(JAWS)*csys_n-0.5)
@@ -353,12 +363,12 @@ if __name__ == "__main__":
     jaw.partition()
     jaw.mesh(size = 0.0015, dev_factor=0.1, min_size_factor = 0.1 )
 
-    assembly = Assembly(workpiece=workpiece, jaw=jaw, jaw_force=N(1000))
+    assembly = Assembly(workpiece=workpiece, jaw=jaw, jaw_num=jaw_num, jaw_force=N(1000))
     a = mdb.models['Model-1'].rootAssembly
     session.viewports['Viewport: 1'].setValues(displayedObject=a)
     session.viewports['Viewport: 1'].view.setValues(session.views['Iso'])
 
-    run_job(home)
+    run_job()
 
 
 

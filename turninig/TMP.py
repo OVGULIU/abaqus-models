@@ -211,7 +211,7 @@ class Assembly:
                 pass
         
 
-    def create_assembly(self,jawf, outer, length):
+    def create_assembly(self, jawf, outer, length):
         self.interaction_property = InteractionProperty()
         a = mdb.models['Model-1'].rootAssembly
         a.DatumCsysByDefault(CARTESIAN)
@@ -220,12 +220,12 @@ class Assembly:
         p = mdb.models['Model-1'].parts['Jaw']
         a.Instance(name='Jaw-1', part=p, dependent=ON)
         a.rotate(instanceList=('Jaw-1', ), axisPoint=(0, 0, 0), axisDirection=OX, angle=rad(-90.0))
-        a.translate(instanceList=('Jaw-1', ), vector=(0, outer, 0.5 * jaw_height))
+        a.translate(instanceList=('Jaw-1', ), vector=(0, outer, 0.5 * self.jaw.height))
         a.RadialInstancePattern(instanceList=('Jaw-1', ), point=(0, 0, 0), axis=OZ, number=3, totalAngle=-360)
         mdb.models['Model-1'].rootAssembly.features.changeKey(fromName='Jaw-1', toName='Jaw-1-rad-1')
         sys.__stdout__.write("Create assembly"+"\n") 
         self.create_interaction()
-        c_systems = create_CSYS()
+        c_systems = self.create_CSYS()
         self.create_step()
         self.create_jaw_BSs(c_systems)
         self.apply_jaw_force(jawf, c_systems)
@@ -249,7 +249,7 @@ class Assembly:
         
 
     def create_interaction(self):
-        z = jaw_length/100
+        z = self.jaw.length/100
         # mid_d = float(inner-outer)/2+inner
         for j in JAWS:
             jaw = 'Jaw-1-rad-'+str(j)
@@ -261,10 +261,10 @@ class Assembly:
             jaw_instance = a.instances[jaw]
             workpiece = a.instances['Part-1']
             jaw_angle = 360/3 * (1-j)
-            p1 = rotate((0.25 * jaw_length, outer, 0.25 * jaw_height), OZ, deg(jaw_angle))
-            p2 = rotate((-0.25 * jaw_length, outer, 0.25 * jaw_height), OZ, deg(jaw_angle))
-            p3 = rotate((0.25 * jaw_length, outer, 0.75 * jaw_height), OZ, deg(jaw_angle))
-            p4 = rotate((-0.25 * jaw_length, outer, 0.75 * jaw_height), OZ, deg(jaw_angle))
+            p1 = rotate((0.25 * self.jaw.length, outer, 0.25 * self.jaw.height), OZ, deg(jaw_angle))
+            p2 = rotate((-0.25 * self.jaw.length, outer, 0.25 * self.jaw.height), OZ, deg(jaw_angle))
+            p3 = rotate((0.25 * self.jaw.length, outer, 0.75 * self.jaw.height), OZ, deg(jaw_angle))
+            p4 = rotate((-0.25 * self.jaw.length, outer, 0.75 * self.jaw.height), OZ, deg(jaw_angle))
 
             jaw_faces = jaw_instance.faces.findAt( (p1,),(p2,), (p3,), (p4,), )
             region1=a.Surface(side1Faces=jaw_faces, name=jaw + '_master_surf')
@@ -312,8 +312,8 @@ class Assembly:
             a = mdb.models['Model-1'].rootAssembly
             f1 = a.instances['Jaw-1-rad-'+str(j)].faces
             #faces1 = f1.getSequenceFromMask(mask=('[#402 ]', ), )
-            x1, y1 = pol2cart(outer+jaw_width/2, 360/len(JAWS)*csys_n+0.5)
-            x2, y2 = pol2cart(outer+jaw_width/2, 360/len(JAWS)*csys_n-0.5)
+            x1, y1 = pol2cart(outer+self.jaw.width/2, 360/len(JAWS)*csys_n+0.5)
+            x2, y2 = pol2cart(outer+self.jaw.width/2, 360/len(JAWS)*csys_n-0.5)
             
             # faces1 = f1.findAt((x1,y1, 0),(x2,y2, 0))
             # sys.__stdout__.write( str(faces1))

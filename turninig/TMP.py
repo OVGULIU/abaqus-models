@@ -215,15 +215,24 @@ class Assembly:
         self.a.features.changeKey(fromName=jaw.name, toName=jaw.name+'-rad-1')
         self.assembly_jaws = [Assembly.Jaw(i, 'Jaw-rad-'+str(i)) for i in range(1, 1+jaw_num)]
         self.interactionProperty = InteractionProperty()
+        
         for a_jaw in self.assembly_jaws:
-            self._create_interaction(a_jaw) 
-        c_systems = self.create_CSYS()
+            self._create_CSYS(a_jaw)
+            self._create_interaction(a_jaw)
+            self._create_jaw_BSs(a_jaw)
         self.step = Step("Step-1")
-        self.create_jaw_BSs(c_systems)
-        self.apply_jaw_force(jaw_force, c_systems)
+        for a_jaw in self.assembly_jaws:
+            self._apply_jaw_force(a_jaw, jaw_force)
+
         self.__create_workpiece_partion()
         self.workpiece.part.generateMesh()
         self.a.regenerate()
+
+    def _create_CSYS(self, jaw):    
+        jaw.CSYS = self.a.DatumCsysByThreePoints(origin=rotate((0, workpiece.outer, 0), OZ, deg(jaw.angle)), 
+            point1=(0,0,0), 
+            point2=rotate((1, workpiece.outer, 0), OZ, deg(jaw.angle)), 
+            name=jaw.name + '_CSYS', coordSysType=CARTESIAN)
 
     def _create_interaction(self, jaw):
         jaw_instance = self.a.instances[jaw.name]
@@ -270,52 +279,29 @@ class Assembly:
             except:
                 print('Not Ok')  
 
-    def apply_jaw_force(self,value, c_systems):
-        for j in JAWS:
-            jaw = 'Jaw-rad-'+str(j)
-            # JAWS=1,2,3; csys_n = 0,1,2
-            csys_n = (-j+2) %3
-            v1 = self.a.instances[jaw].vertices
-            verts1 = v1.getSequenceFromMask(mask=('[#1 ]', ), )
-            region = self.a.Set(vertices=verts1, name=jaw+'force_set')
-            datum = self.a.datums[c_systems[csys_n].id]
-            model.ConcentratedForce(name=jaw + 'load', createStepName=self.step.name, 
-                region=region, cf1=value, distributionType=UNIFORM, field='', localCsys=datum)
+    def _create_jaw_BSs(self, jaw):
+        jaw_instance = self.a.instances[jaw.name]
         
-    def create_CSYS(self):
-        res=[]
-        for j in JAWS:
-            jaw = 'Jaw-rad-'+str(j)
-            csys_n = j+1
-            d1 = self.a.instances[jaw].datums
-            v1 = self.a.instances[jaw].vertices
-            jaw_angle = csys_n *360/3
-            res.append(self.a.DatumCsysByThreePoints(origin=rotate((0, self.workpiece.outer, 0), OZ, deg(jaw_angle)), 
-                point1=(0,0,0), 
-                point2=rotate((1, self.workpiece.outer, 0), OZ, deg(jaw_angle)), 
-                name=jaw + '_csys', coordSysType=CARTESIAN))
-        return res
+        jaw_faces = jaw_instance.faces.findAt(
+            (rotate((0.25 * self.jaw.length, self.workpiece.outer + 0.5* self.jaw.width, 0), OZ, deg(jaw.angle)),),
+            (rotate((-0.25 * self.jaw.length, self.workpiece.outer + 0.5* self.jaw.width, 0), OZ, deg(jaw.angle)),),
+            )
+        
+        region = self.a.Set(faces = jaw_faces, name='Jaw_BS_set-'+jaw.name)
+        
+        datum = self.a.datums[jaw.CSYS.id]
+        model.DisplacementBC(name='BC-'+jaw.name, createStepName='Initial', 
+            region=region, u1=UNSET, u2=SET, u3=SET, ur1=UNSET, ur2=UNSET, ur3=UNSET, 
+            amplitude=UNSET, distributionType=UNIFORM, fieldName='', localCsys=datum)
 
-    def create_jaw_BSs(self,c_systems):
-        for j in JAWS:
-            jaw = 'Jaw-rad-'+str(j)
-            #starts from 0 cause c_systems is passed to function
-            # JAWS=1,2,3; csys_n = 0,1,2
-            csys_n = (-j+2) %3
-            f1 = self.a.instances['Jaw-rad-'+str(j)].faces
-            #faces1 = f1.getSequenceFromMask(mask=('[#402 ]', ), )
-            x1, y1 = pol2cart(self.workpiece.outer+self.jaw.width/2, 360/len(JAWS)*csys_n+0.5)
-            x2, y2 = pol2cart(self.workpiece.outer+self.jaw.width/2, 360/len(JAWS)*csys_n-0.5)
-            
-            # faces1 = f1.findAt((x1,y1, 0),(x2,y2, 0))
-            # sys.__stdout__.write( str(faces1))
-            faces1 = f1.getSequenceFromMask(mask=('[#402 ]', ), )
-            # faces1 = f1.getSequenceFromMask(mask=('[#8200 ]', ), )
-            region = self.a.Set(faces = faces1, name='Jaw_BS_set-'+str(j))
-            datum = self.a.datums[c_systems[csys_n].id]
-            model.DisplacementBC(name='BC-'+str(j), createStepName='Initial', 
-                region=region, u1=UNSET, u2=SET, u3=SET, ur1=UNSET, ur2=UNSET, ur3=UNSET, 
-                amplitude=UNSET, distributionType=UNIFORM, fieldName='', localCsys=datum)
+    def _apply_jaw_force(self, jaw, value):
+        vertices = self.a.instances[jaw.name].vertices
+        verts1 = vertices.getSequenceFromMask(mask=('[#1 ]', ), ) # hack, replace it with findAt
+        region = self.a.Set(vertices=verts1, name='Jaw-force-region-'+jaw.name)        
+        datum = self.a.datums[jaw.CSYS.id]
+        model.ConcentratedForce(name='Load-'+jaw.name, createStepName=self.step.name, 
+            region=region, cf1=value, distributionType=UNIFORM, field='', localCsys=datum)
+   
 
         
 

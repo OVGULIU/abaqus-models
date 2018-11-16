@@ -77,6 +77,7 @@ class MaterialExplicit:
         self.material.johnsonCookDamageInitiation.DamageEvolution(type=DISPLACEMENT, table=((disp_at_failure, ), ))
 
 
+
 class Material:
 
     def __init__(self, name, young, poisson):
@@ -226,7 +227,7 @@ class Assembly:
         sys.__stdout__.write("Create assembly"+"\n") 
         self.create_interaction()
         c_systems = self.create_CSYS()
-        self.create_step()
+        self.step = Step("Step-1")
         self.create_jaw_BSs(c_systems)
         self.apply_jaw_force(jawf, c_systems)
         self.__create_workpiece_partion()
@@ -244,7 +245,7 @@ class Assembly:
             verts1 = v1.getSequenceFromMask(mask=('[#1 ]', ), )
             region = a.Set(vertices=verts1, name=jaw+'force_set')
             datum = mdb.models['Model-1'].rootAssembly.datums[c_systems[csys_n].id]
-            mdb.models['Model-1'].ConcentratedForce(name=jaw + 'load', createStepName='Step-1', 
+            mdb.models['Model-1'].ConcentratedForce(name=jaw + 'load', createStepName=self.step.name, 
                 region=region, cf1=value, distributionType=UNIFORM, field='', localCsys=datum)
         
 
@@ -325,9 +326,6 @@ class Assembly:
                 region=region, u1=UNSET, u2=SET, u3=SET, ur1=UNSET, ur2=UNSET, ur3=UNSET, 
                 amplitude=UNSET, distributionType=UNIFORM, fieldName='', localCsys=datum)
 
-                
-    def create_step(self):
-        mdb.models['Model-1'].StaticStep(name='Step-1', previous='Initial')
         
 
 def run_job(home):

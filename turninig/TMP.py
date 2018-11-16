@@ -150,6 +150,37 @@ class Workpiece:
 
 
 
+
+class CustomWorkpiece:
+
+    def __init__(self, path, outer_radius):
+        self.name = 'Workpiece'
+        self.outer = outer_radius
+        step = mdb.openStep(path, scaleFromFile=OFF)
+        model.PartFromGeometryFile(name=self.name, geometryFile=step, 
+            combine=False, dimensionality=THREE_D, type=DEFORMABLE_BODY, scale=0.001)
+        self.part = model.parts[self.name]
+        self.partition(3)
+
+    def partition(self, number):
+        for angle in np.arange(-30, -30+360, 360/number):
+            try:
+                self.part.PartitionCellByPlaneThreePoints(cells=self.part.cells, point1=(0,0,0), point2=(1,0,0), point3=(0,) +pol2cart(1, 30+angle))
+            except:
+                print("One partition failed")
+        
+    def mesh(self, size, dev_factor, min_size_factor):
+        self.part.setMeshControls(regions=self.part.cells, technique=SWEEP, algorithm=MEDIAL_AXIS)
+        self.part.seedPart(size=size, deviationFactor=dev_factor, minSizeFactor=min_size_factor)
+        self.part.generateMesh()
+
+    def set_section(self, section):
+        region = self.part.Set(cells=self.part.cells, name='Material-region')
+        self.part.SectionAssignment(region=region, sectionName=section.name, offset=0.0, 
+            offsetType=MIDDLE_SURFACE, offsetField='', thicknessAssignment=FROM_SECTION)
+
+
+
 class Jaw:
 
     def __init__(self, length, width, height):
@@ -208,6 +239,10 @@ class Assembly:
         self.a = model.rootAssembly    
         self.a.DatumCsysByDefault(CARTESIAN)
         self.a.Instance(name=workpiece.name, part=workpiece.part, dependent=ON)
+        
+        self.a.rotate(instanceList=(workpiece.name, ), axisPoint=(0, 0, 0), axisDirection=OY, angle=rad(-90.0))
+        self.a.translate(instanceList=('Workpiece', ), vector=(0.0, 0.0, 0.015-0.1))
+
         self.a.Instance(name=jaw.name, part=jaw.part, dependent=ON)
         self.a.rotate(instanceList=(jaw.name, ), axisPoint=(0, 0, 0), axisDirection=OX, angle=rad(-90.0))
         self.a.translate(instanceList=(jaw.name, ), vector=(0, workpiece.outer, 0.5 * jaw.height))
@@ -313,7 +348,8 @@ if __name__ == "__main__":
     aluminum = Material('Aluminum', 0.7e9, 0.28)
     aluminum_section = model.HomogeneousSolidSection(name='Aluminum-section', material=aluminum.name, thickness=None)
     
-    workpiece = Workpiece(length=mm(60), inner=mm(59/2), outer=mm(68/2), p_num=jaw_num)
+    # workpiece = Workpiece(length=mm(60), inner=mm(59/2), outer=mm(68/2), p_num=jaw_num)
+    workpiece = CustomWorkpiece('D:/ereme/GoogleDrive/PostGraduate/ZhAD/parts/meshed/part1.STEP', outer_radius=0.046)
     workpiece.set_section(aluminum_section)
     workpiece.mesh(size=0.002, dev_factor=0.1, min_size_factor = 0.1 )
 

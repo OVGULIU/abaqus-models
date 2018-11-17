@@ -168,11 +168,10 @@ class SketchWorkpiece():
             farPlane=0.106489, cameraPosition=(0.0278429, 0.00694274, 0.0942809), 
             cameraTarget=(0.0278429, 0.00694274, 0))
         
-        points=[(0.030, 0), (0.033, 0), (0.033, 0.04), (0.040, 0.04), (0.040, 0.043),
-        (0.030, 0.043), (0.030, 0)]
+        points=[(0.030, 0), (0.033, 0), (0.033, 0.025), (0.040, 0.025), (0.040, 0.028),(0.030, 0.028), (0.030, 0)]
         for i,point in enumerate(points[:-1]):
             s.Line(point1=points[i], point2=points[i+1])
-    
+            
         p = mdb.models['Model-1'].Part(name='Part-3', dimensionality=THREE_D, 
             type=DEFORMABLE_BODY)
         p = mdb.models['Model-1'].parts['Part-3']
@@ -380,18 +379,15 @@ class Assembly:
         
 
 def run_job():
-    home='C:\\Program Files\\SIMULIA\\Workspace'
-    sys.__stdout__.write("Run job"+"\n")
     Job1 = mdb.Job(name='Job-1', model='Model-1', description='', type=ANALYSIS, 
-    atTime=None, waitMinutes=0, waitHours=0, queue=None, memory=90, 
-    memoryUnits=PERCENTAGE, getMemoryFromAnalysis=True, 
-    explicitPrecision=SINGLE, nodalOutputPrecision=SINGLE, echoPrint=OFF, 
-    modelPrint=OFF, contactPrint=OFF, historyPrint=OFF, userSubroutine='', 
-    scratch=home, resultsFormat=ODB, multiprocessingMode=DEFAULT, numCpus=1, 
-    numGPUs=0)
+        atTime=None, waitMinutes=0, waitHours=0, queue=None, memory=90, 
+        memoryUnits=PERCENTAGE, getMemoryFromAnalysis=True, 
+        explicitPrecision=SINGLE, nodalOutputPrecision=SINGLE, echoPrint=OFF, 
+        modelPrint=OFF, contactPrint=OFF, historyPrint=OFF, userSubroutine='', 
+        scratch='', resultsFormat=ODB, multiprocessingMode=DEFAULT, numCpus=3, 
+        numDomains=3, numGPUs=0)
     Job1.submit(consistencyChecking=OFF)
     Job1.waitForCompletion()
-
 
 jcount = 3
 JAWS = range(1,jcount+1)

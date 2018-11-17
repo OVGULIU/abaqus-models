@@ -13,6 +13,9 @@ import numpy as np
 executeOnCaeStartup()
 Mdb()
 model = mdb.models['Model-1']
+OX = (1, 0, 0)
+OY = (0, 1, 0)
+OZ = (0, 0, 1)
 MAX_TIME = 0.001
 
 def cart2pol(x, y):
@@ -41,6 +44,22 @@ def rad(value):
 def deg(value):
     return (value * pi)/180
 
+def rotate(point, axis, theta):
+    """
+    Return the rotation matrix associated with counterclockwise rotation about
+    the given axis by theta radians.
+    """
+    def rotation_matrix(axis, theta):
+        axis = np.asarray(axis)
+        axis = axis / math.sqrt(np.dot(axis, axis))
+        a = math.cos(theta / 2.0)
+        b, c, d = -axis * math.sin(theta / 2.0)
+        aa, bb, cc, dd = a * a, b * b, c * c, d * d
+        bc, ad, ac, ab, bd, cd = b * c, a * d, a * c, a * b, b * d, c * d
+        return np.array([[aa + bb - cc - dd, 2 * (bc + ad), 2 * (bd - ac)], [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)], [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
+    return tuple(np.dot(rotation_matrix(axis, theta), point))
+
+
 class Material_Explicit:
 
     def __init__(self, name, density, young, poisson, A, B, n, d1, d2, d3, ref_strain_rate, disp_at_failure):
@@ -65,9 +84,10 @@ class Material:
 
 class Workpiece:
 
-    def __init__(self, path, outer_radius):
+    def __init__(self, path, outer_radius, length):
         self.name = 'Workpiece'
         self.outer_radius = outer_radius
+        self.length = length
         step = mdb.openStep(path, scaleFromFile=OFF)
         model.PartFromGeometryFile(name=self.name, geometryFile=step, 
             combine=False, dimensionality=THREE_D, type=DEFORMABLE_BODY, scale=0.001)
@@ -182,10 +202,18 @@ class Assembly:
             self._create_jaw_BSs(a_jaw)
         self.step = Step("Step-1")
         for a_jaw in self.jaws:
+            self._create_tie(a_jaw)
             model.boundaryConditions['BC-'+a_jaw.name].setValuesInStep(stepName=self.step.name, u1=0.0001)
-
+        self.step_2 = Step("Step-2")
+        self._apply_cutting_force(force_rad=300, force_tan=100, force_axial=-100, dz=0.05, phi=deg(-45))
         # for a_jaw in self.jaws:
         #     self._apply_jaw_force(a_jaw, jaw_force)
+
+    def _create_tie(self, jaw):
+        region1=self.a.surfaces[jaw.name+'_master_surf']
+        region2=self.a.surfaces[jaw.name+'_slave_surf']
+        model.Tie(name=jaw.name + 'tie_constr', master=region1, slave=region2, 
+            positionToleranceMethod=COMPUTED, adjust=ON, tieRotations=ON, thickness=ON)
 
 
     def _create_CSYS(self, jaw):
@@ -236,7 +264,8 @@ class Assembly:
             ((-0.75 * self.jaw.length, y2_w, z2_w), )
             )
         region_workpiece=self.a.Surface(side1Faces=workpiece_faces, name=jaw.name + '_slave_surf')
-        # return
+        # no need for interaction with tie constraint!
+        return
         model.SurfaceToSurfaceContactStd(name='Interaction-'+jaw.name, 
             createStepName='Initial', master=region_jaw, slave=region_workpiece, sliding=FINITE, 
             thickness=ON, interactionProperty=property.name, adjustMethod=NONE, 
@@ -259,8 +288,38 @@ class Assembly:
         datum = self.a.datums[self.CSYSs[jaw].id]
         model.ConcentratedForce(name='Load-'+jaw.name, createStepName=self.step.name, 
             region=region, cf1=value, distributionType=UNIFORM, field='', localCsys=datum)
-   
 
+    def _apply_cutting_force(self, force_rad, force_tan, force_axial, dz, phi):
+        dct = dict((k,v) for (k,v) in [('cf1', force_rad), ('cf2', force_tan), ('cf3', force_axial)] if v !=0)
+
+        x = dz-self.workpiece.length
+        x, y, z = rotate(point=(x, 0, self.workpiece.outer_radius), axis=OX, theta=phi)
+
+        import nearestNodeModule
+        session.viewports['Viewport: 1'].assemblyDisplay.setValues(mesh=ON)
+        session.viewports['Viewport: 1'].assemblyDisplay.meshOptions.setValues(
+            meshTechnique=ON)
+        pickedSelectedNodes = self.a.instances[workpiece.name].nodes
+        force_node_info = nearestNodeModule.findNearestNode(xcoord=x, ycoord=y, zcoord=z, name='', 
+            selectedNodes=pickedSelectedNodes, instanceName="'Workpiece'")
+        nearestNodeModule.hideTextAndArrow()
+        node_index = force_node_info[0]
+        force_node = self.a.instances[workpiece.name].nodes.sequenceFromLabels((node_index,))
+
+        nf_x, nf_y, nf_z = force_node[0].coordinates
+        
+        csys = self.a.DatumCsysByThreePoints(origin=(nf_x, nf_y, nf_z), 
+            point1=(x, 0, 0), 
+            point2=(nf_x-0.01, nf_y, nf_z), 
+            name = 'force_CSYS', coordSysType=CARTESIAN)
+        
+        region = self.a.Set(nodes= force_node,
+         name='Force-nodes')
+        
+        datum = self.a.datums[csys.id]
+        model.ConcentratedForce(name='cutting_force', createStepName=self.step_2.name, 
+            region=region, distributionType=UNIFORM, field='', localCsys=datum, **dct)
+        
 
 def run_job():
     Job1 = mdb.Job(name='Job-1', model='Model-1', description='', type=ANALYSIS, 
@@ -290,16 +349,16 @@ if __name__ =="__main__":
     alu_section = model.HomogeneousSolidSection(name='Alu section', material=alu.name, thickness=None)
 
     # create workpiece
-    workpiece = Workpiece('D:/ereme/GoogleDrive/PostGraduate/ZhAD/parts/meshed/part1.STEP', outer_radius=0.046)
+    workpiece = Workpiece('D:/ereme/GoogleDrive/PostGraduate/ZhAD/parts/meshed/part1.STEP', outer_radius=0.046, length=0.200)
     workpiece.partition(3)
-    workpiece.mesh(size=0.002, dev_factor=0.1, min_size_factor = 0.1)
+    workpiece.mesh(size=0.003, dev_factor=0.1, min_size_factor = 0.1)
     workpiece.set_section(alu_section)
     session.viewports['Viewport: 1'].setValues(displayedObject=workpiece.part)
 
     #  create jaw
     jaw = Jaw(length=0.02, width=0.02, height=0.02)
     jaw.partition()
-    jaw.mesh(size=0.0015, dev_factor=0.1, min_size_factor=0.1)
+    jaw.mesh(size=0.003, dev_factor=0.1, min_size_factor=0.1)
     jaw.set_section(steel_section)
     session.viewports['Viewport: 1'].setValues(displayedObject=jaw.part)
 

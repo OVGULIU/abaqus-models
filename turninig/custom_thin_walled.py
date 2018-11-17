@@ -218,7 +218,7 @@ class Assembly:
             ((-0.75 * self.jaw.length, y1, z1), ), 
             ((-0.75 * self.jaw.length, y2, z2), )
             )
-        region_jaw=self.a.Surface(side1Faces=jaw_faces, name=jaw.name + '_slave_surf')       
+        region_jaw=self.a.Surface(side1Faces=jaw_faces, name=jaw.name + '_master_surf')       
 
 
         # create workpiece master region   
@@ -234,10 +234,10 @@ class Assembly:
             ((-0.75 * self.jaw.length, y1_w, z1_w), ), 
             ((-0.75 * self.jaw.length, y2_w, z2_w), )
             )
-        region_workpiece=self.a.Surface(side1Faces=workpiece_faces, name=jaw.name + '_master_surf')
-
+        region_workpiece=self.a.Surface(side1Faces=workpiece_faces, name=jaw.name + '_slave_surf')
+        # return
         mdb.models['Model-1'].SurfaceToSurfaceContactStd(name='Interaction-'+jaw.name, 
-            createStepName='Initial', master=region_workpiece, slave=region_jaw, sliding=FINITE, 
+            createStepName='Initial', master=region_jaw, slave=region_workpiece, sliding=FINITE, 
             thickness=ON, interactionProperty=property.name, adjustMethod=NONE, 
             initialClearance=OMIT, datumAxis=None, clearanceRegion=None)
 

@@ -105,7 +105,10 @@ class Workpiece:
 
     def partition(self, number):
         for angle in np.arange(0, 360, 360/number):
-            self.part.PartitionCellByPlaneThreePoints(cells=self.part.cells, point1=(0,0,0), point2=(1,0,0), point3=(0,) +pol2cart(1, 30+angle))
+            try:
+                self.part.PartitionCellByPlaneThreePoints(cells=self.part.cells, point1=(0,0,0), point2=(1,0,0), point3=(0,) +pol2cart(1, 30+angle))
+            except Exception as e:
+                print("skip partition: " + str(angle))            
         
 
     def mesh(self, size, dev_factor, min_size_factor):
@@ -214,7 +217,6 @@ class Assembly:
             self._create_tie(a_jaw)
             model.boundaryConditions['BC-'+a_jaw.name].setValuesInStep(stepName=self.step.name, u1=0.0001)
         self.step_2 = Step("Step-2")
-        self._apply_cutting_force(force_rad=300, force_tan=100, force_axial=-100, dz=0.05, phi=deg(-45))
         # for a_jaw in self.jaws:
         #     self._apply_jaw_force(a_jaw, jaw_force)
 
@@ -358,9 +360,9 @@ if __name__ =="__main__":
     alu_section = model.HomogeneousSolidSection(name='Alu section', material=alu.name, thickness=None)
 
     # create workpiece
-    workpiece = Workpiece(cd+'\step_models\part1.STEP', outer_radius=0.046, length=0.200)
-    workpiece.partition(3)
-    workpiece.mesh(size=0.003, dev_factor=0.1, min_size_factor = 0.1)
+    workpiece = Workpiece(cd+'\step_models\part2.STEP', outer_radius=135.979E-03/2, length=0.200)
+    workpiece.partition(6)
+    workpiece.mesh(size=0.006, dev_factor=0.1, min_size_factor = 0.1)
     workpiece.set_section(alu_section)
     session.viewports['Viewport: 1'].setValues(displayedObject=workpiece.part)
 

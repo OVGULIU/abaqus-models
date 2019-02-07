@@ -23,6 +23,10 @@ OY = (0, 1, 0)
 OZ = (0, 0, 1)
 MAX_TIME = 0.001
 
+import inspect
+filename = inspect.getframeinfo(inspect.currentframe()).filename
+cd = os.path.dirname(os.path.abspath(filename))
+
 def cart2pol(x, y):
     rho = np.sqrt(x**2 + y**2)
     phi = np.arctan2(y, x)
@@ -356,7 +360,7 @@ if __name__ =="__main__":
     alu_section = model.HomogeneousSolidSection(name='Alu section', material=alu.name, thickness=None)
 
     # create workpiece
-    workpiece = Workpiece('D:/ereme/GoogleDrive/PostGraduate/ZhAD/parts/meshed/part2.STEP', outer_radius=135.979E-03/2, length=0.200)
+    workpiece = Workpiece(cd+'\step_models\part2.STEP', outer_radius=135.979E-03/2, length=0.200)
     workpiece.partition(6)
     workpiece.mesh(size=0.006, dev_factor=0.1, min_size_factor = 0.1)
     workpiece.set_section(alu_section)

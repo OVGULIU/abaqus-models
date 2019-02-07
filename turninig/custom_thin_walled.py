@@ -1,3 +1,8 @@
+"""If an error occures on import nearestNodeModule:
+1) Switch to Assembly
+2) Switch to Mesh (you need meshed assembly view)
+3) In Abaqus main menu navigate to Plugins->Tools->Find Nearest Node. 
+It will initialize the module"""
 from abaqus import *
 from abaqusConstants import *
 from caeModules import *

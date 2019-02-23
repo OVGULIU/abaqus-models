@@ -108,7 +108,7 @@ class Workpiece:
     def set_section(self, section):
         c = self.part.cells
         pickedRegions = c.findAt((self.c1_point, ), (self.c2_point, ), (self.c3_point, ), (self.c_point, ))
-        region = self.part.Set(cells=pickedRegions, name='Material region')
+        region = self.part.Set(cells=pickedRegions, name='Material')
         self.part.SectionAssignment(region=region, sectionName=section.name, offset=0.0, 
             offsetType=MIDDLE_SURFACE, offsetField='', thicknessAssignment=FROM_SECTION)
         
@@ -171,7 +171,7 @@ class Tool:
     def set_section(self, section):
         c = self.part.cells
         cells = c.getSequenceFromMask(mask=('[#1 ]', ), )
-        region = self.part.Set(cells=cells, name='Material region')
+        region = self.part.Set(cells=cells, name='Material')
         self.part.SectionAssignment(region=region, sectionName=section.name, offset=0.0, 
             offsetType=MIDDLE_SURFACE, offsetField='', thicknessAssignment=FROM_SECTION)
 
@@ -199,7 +199,7 @@ class Tool:
 class Assembly:
 
     def __init__(self, workpiece, tool):
-        x_delta_mill = mm(1.5)
+        x_delta_mill = mm(0)
         y_delta_mill = mm(-5)
         z_delta_mill = mm(0)
         self.workpiece = workpiece
@@ -217,40 +217,39 @@ class Assembly:
         self.workpieceInstance = self.a.instances[workpiece.name]
         self.toolInstance = self.a.instances[tool.name]
         
-        millCenterPoint=(0.5*(workpiece.w_width + workpiece.b_width) -0.9 * tool.diameter + x_delta_mill,
-                        tool.length + workpiece.w_height + workpiece.b_height -0.75 * tool.cutter_length + y_delta_mill,
-                        workpiece.length + 0.5 * tool.diameter + z_delta_mill)
-        refPoint = self.a.ReferencePoint(point=millCenterPoint)
-        refPointRegion=regionToolset.Region(referencePoints=(self.a.referencePoints[refPoint.id],))
-        toolBodyRegion = self.a.Set(cells=self.toolInstance.cells, name='toolBodyRegion')
-        model.RigidBody(name='RP-RigidBody-Constraint', refPointRegion=refPointRegion, bodyRegion=toolBodyRegion)
+        self.millCenterPoint=(0.5*(workpiece.w_width + workpiece.b_width) -0.9 * tool.diameter + x_delta_mill,
+                tool.length + workpiece.w_height + workpiece.b_height -0.75 * tool.cutter_length + y_delta_mill,
+                workpiece.length + 0.5 * tool.diameter + z_delta_mill)
+
+        
         session.viewports['Viewport: 1'].setValues(displayedObject=self.a)
-        session.viewports['Viewport: 1'].view.fitView()
-    
+        session.viewports['Viewport: 1'].view.fitView()    
+
+
     def workpiece_bc(self):
+        name = 'Workpiece Bottom Encastre'
         p1 = (0.25 * (workpiece.b_width - workpiece.w_width), 0, 0.5 * workpiece.length)
         p2 = (0.5 * workpiece.b_width, 0, 0.5 * workpiece.length)
         p3 = (workpiece.b_width - 0.25 * (workpiece.b_width - workpiece.w_width), 0, 0.5 * workpiece.length)
-        f1 = self.a.instances[self.workpiece.name].faces
+        f1 = self.workpieceInstance.faces
         faces1 = f1.findAt((p1, ), (p3, ), (p2, ) )
-        region = self.a.Set(faces=faces1, name='Workpiece bottom')
-        model.EncastreBC(name='BC workpiece bottom', createStepName='Initial', region=region, localCsys=None)
+        region = self.a.Set(faces=faces1, name=name)
+        model.EncastreBC(name=name, createStepName='Initial', region=region, localCsys=None)
 
     def tool_bc(self, step):
-        name = "BC tool"
-        tool_inst = self.a.instances[self.tool.name]
-        c1 = tool_inst.cells
-        f1 = tool_inst.faces
-        e1 = tool_inst.edges
-        v1 = tool_inst.vertices
-        region = self.a.Set(vertices=v1, edges=e1, faces=f1, cells=c1, name='Tool set')
-        
-        model.DisplacementBC(name=name, createStepName='Initial', 
-            region=region, u1=SET, u2=SET, u3=SET, ur1=SET, ur2=SET, ur3=SET, 
-            amplitude=UNSET, distributionType=UNIFORM, fieldName='', localCsys=None)
-        model.TabularAmplitude(name='Amplitude-1', timeSpan=STEP, 
-            smooth=SOLVER_DEFAULT, data=((0.0, 0.0), (MAX_TIME, 1.0)))
-        model.boundaryConditions[name].setValuesInStep(stepName=step.name, u3=-self.workpiece.length, amplitude='Amplitude-1')
+        name = 'Tool RP Velocity'
+        # create reference point
+        refPoint = self.a.ReferencePoint(point=self.millCenterPoint)
+        refPointRegion=regionToolset.Region(referencePoints=(self.a.referencePoints[refPoint.id],))
+        toolBodyRegion = self.a.Set(cells=self.toolInstance.cells, name=name)
+        model.RigidBody(name='Tool RP RigidBody', refPointRegion=refPointRegion, bodyRegion=toolBodyRegion)
+        model.rootAssembly.features.changeKey(fromName='RP-1', toName='Tool Top RP')
+        # create velocity BC
+        model.VelocityBC(name=name, createStepName='Initial', 
+            region=refPointRegion, v1=0.0, v2=0.0, v3=0.0, vr1=0.0, vr2=0.0, vr3=0.0, 
+            amplitude=UNSET, localCsys=None, distributionType=UNIFORM, fieldName='')
+        model.boundaryConditions[name].setValuesInStep(stepName=step.name, v3=-120)
+        model.boundaryConditions[name].setValuesInStep(stepName=step.name, vr2=6000)
 
 
 class Step:
@@ -278,7 +277,7 @@ class Interaction:
 
 
 if __name__ == "__main__":
-    workpiece = Workpiece("Brick", length=mm(100), w_height=mm(60), w_width=mm(5), b_height=mm(10), b_width=mm(50))
+    workpiece = Workpiece("Workpiece", length=mm(100), w_height=mm(60), w_width=mm(5), b_height=mm(10), b_width=mm(50))
     workpiece.create()
     workpiece.mesh()
     
@@ -294,23 +293,26 @@ if __name__ == "__main__":
         A=3.241e8, B=1.138e8, n=0.42, 
         d1=-0.77, d2=1.45, d3=-0.47, ref_strain_rate=1.0, disp_at_failure=1e-4)
     alu_section = model.HomogeneousSolidSection(name='Alu section', material=alu.name, thickness=None)
-    # assign materials
+    # assign materials 
     workpiece.set_section(alu_section)
     tool.set_section(steel_section)
 
     assembly = Assembly(workpiece, tool)
-    step1 = Step("Step-1")
-    Interaction(step1, friction=0.15)
     assembly.workpiece_bc()
+    
+    step1 = Step("Step-1")
+    Interaction(step1, friction=0.15)    
     assembly.tool_bc(step1)
-    mdb.Job(name='Chipformation', model='Model-1', description='', type=ANALYSIS, 
+    model.fieldOutputRequests['F-Output-1'].setValues(variables=('A', 'CSTRESS', 'EVF', 'LE', 'PE', 'PEEQ', 'PEEQVAVG', 'PEVAVG', 'RF', 'S', 
+        'STATUS', # important!
+        'SVAVG', 'U', 'V'))
+
+    mdb.Job(name='Chipformation-v2', model='Model-1', description='', type=ANALYSIS, 
         atTime=None, waitMinutes=0, waitHours=0, queue=None, memory=90, 
         memoryUnits=PERCENTAGE, explicitPrecision=SINGLE, 
         nodalOutputPrecision=SINGLE, echoPrint=OFF, modelPrint=OFF, 
         contactPrint=OFF, historyPrint=OFF, userSubroutine='', scratch='', 
         resultsFormat=ODB, parallelizationMethodExplicit=DOMAIN, numDomains=4, 
         activateLoadBalancing=False, multiprocessingMode=DEFAULT, numCpus=4)
-    model.fieldOutputRequests['F-Output-1'].setValues(variables=(
-    'S', 'SVAVG', 'PE', 'PEVAVG', 'PEEQ', 'PEEQVAVG', 'LE', 'U', 'V', 'A', 
-    'RF', 'CSTRESS', 'EVF', 'STATUS'))
-    # mdb.jobs['Chipformation'].submit(consistencyChecking=OFF)
+
+    mdb.jobs['Chipformation-v2'].submit(consistencyChecking=OFF)

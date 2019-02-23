@@ -277,7 +277,7 @@ class Interaction:
 if __name__ == "__main__":
     executeOnCaeStartup()
     Mdb()  # clear all
-    workpiece = Workpiece("Brick", length=mm(100), w_height=mm(30), w_width=mm(5), b_height=mm(25), b_width=mm(50))
+    workpiece = Workpiece("Brick", length=mm(40), w_height=mm(30), w_width=mm(5), b_height=mm(5), b_width=mm(30))
     workpiece.create()
     workpiece.mesh()
     

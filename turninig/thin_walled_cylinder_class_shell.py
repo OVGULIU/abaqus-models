@@ -420,6 +420,34 @@ class Assembly:
             region=region, cf1=value, distributionType=UNIFORM, field='', localCsys=datum)
    
 
+    def create_force(self, tanf, radf, axlf, angle, fparameter):
+        if tanf**2+ radf**2 + axlf**2 == 0:
+            return
+        d = self.a.datums
+        n = self.workpiece.part.nodes
+        n = self.a.instances[workpiece.name].nodes
+        force_sys = self.a.DatumCsysByTwoLines(CYLINDRICAL, line1=d[1].axis1, line2=d[1].axis2, name='Cutting_force_csys')
+        v = self.a.instances[workpiece.name].vertices
+
+        datum = model.rootAssembly.datums[force_sys.id]
+        dct = dict((k,v) for (k,v) in [('cf1', radf), ('cf2', tanf), ('cf3', axlf)] if v !=0)
+        
+        delta = 0.5e-4
+        nodes1=[]
+        x,y = pol2cart(self.workpiece.outer,angle)
+        z = self.workpiece.length * (1-fparameter)
+        while not nodes1:
+            xmin, ymin, zmin = x-delta, y-delta, z-delta
+            xmax, ymax, zmax = x+delta, y+delta, z+delta 
+            nodes1 = n.getByBoundingBox(xmin, ymin, zmin, xmax, ymax, zmax)
+            delta+=delta
+
+        region = self.a.Set(nodes=nodes1, name='Force-nodes')
+        mdb.models['Model-1'].StaticStep(name='Step-2', previous='Step-1')
+        model.ConcentratedForce(name='Cutting_force', createStepName='Step-2', 
+                region=region, distributionType=UNIFORM, field='', localCsys=datum, **dct)
+            
+    
         
 
 def run_job():
@@ -465,6 +493,7 @@ if __name__ == "__main__":
     jaw.mesh(size=0.0015, dev_factor=0.1, min_size_factor=0.1)
 
     assembly = Assembly(workpiece=workpiece, jaw=jaw, jaw_num=jaw_num, jaw_force=N(1000))
+    assembly.create_force(300, -400, -500, 30, 0.2)
 
     a = mdb.models['Model-1'].rootAssembly
     session.viewports['Viewport: 1'].setValues(displayedObject=a)
@@ -472,6 +501,19 @@ if __name__ == "__main__":
 
     run_job()
 
+    session.graphicsOptions.setValues(backgroundStyle=SOLID, backgroundColor='#FFFFFF')
+    session.viewports['Viewport: 1'].viewportAnnotationOptions.setValues(triad=ON, 
+    legend=ON, title=OFF, state=OFF, annotations=OFF, compass=OFF)
+
+    o3 = session.openOdb(name='C:/Program Files/SIMULIA/Temp/Job-1.odb')
+    session.viewports['Viewport: 1'].setValues(displayedObject=o3)
+    o3 = session.openOdb(name='C:/Program Files/SIMULIA/Temp/Job-1.odb')
+    session.viewports['Viewport: 1'].setValues(displayedObject=o3)
 
 
+    session.viewports['Viewport: 1'].odbDisplay.display.setValues(plotState=(CONTOURS_ON_DEF, ))
+    session.viewports['Viewport: 1'].view.setValues(session.views['Iso'])
+    session.viewports['Viewport: 1'].odbDisplay.setPrimaryVariable(variableLabel='U', outputPosition=NODAL, refinement=(INVARIANT, 
+        'Magnitude'), )
+    session.viewports['Viewport: 1'].odbDisplay.basicOptions.setValues(renderShellThickness=ON)
 

@@ -295,7 +295,7 @@ class Assembly:
         self.workpieceInstance = self.a.instances[workpiece.name]
         self.toolInstance = self.a.instances[tool.name]
         
-        self.a.translate(instanceList=('Tool', ), vector=(0.0685, 0.07, 0.0045))
+        self.a.translate(instanceList=('Tool', ), vector=(0.0645, 0.07, -0.0037))
         self.a.translate(instanceList=('Tool', ), vector=(0, 0.005, 0))
         self.a.translate(instanceList=('Tool', ), vector=(0.0, 0.0, -0.0125))
         session.viewports['Viewport: 1'].setValues(displayedObject=self.a)
@@ -323,7 +323,7 @@ class Assembly:
         model.VelocityBC(name=name, createStepName='Initial', 
             region=refPointRegion, v1=0.0, v2=0.0, v3=0.0, vr1=0.0, vr2=0.0, vr3=0.0, 
             amplitude=UNSET, localCsys=None, distributionType=UNIFORM, fieldName='')
-        model.boundaryConditions[name].setValuesInStep(stepName=step.name, v3=50)
+        model.boundaryConditions[name].setValuesInStep(stepName=step.name, v3=30)
         model.boundaryConditions[name].setValuesInStep(stepName=step.name, vr2=-6000)        
 
 
@@ -342,6 +342,7 @@ if __name__ == "__main__":
     workpiece = Workpiece("Workpiece", length=mm(50), w_height=mm(60), w_width=mm(25), b_height=mm(10), b_width=mm(50))
     workpiece.create()
     ti6alv = Ti6AlV()
+    mdb.models['Model-1'].materials['Ti6AlV'].johnsonCookDamageInitiation.DamageEvolution(type=DISPLACEMENT, table=((0.001, ), ))
     workpiece.set_material(ti6alv)
     workpiece.mesh()
 
@@ -355,10 +356,19 @@ if __name__ == "__main__":
         'STATUS', # important!
         'SVAVG', 'U', 'V'))
     model.fieldOutputRequests['F-Output-1'].setValues(
-    numIntervals=1000)
+    numIntervals=400)
     model.steps['Step-1'].setValues(timePeriod=0.002)
 
 
 
     a = mdb.models['Model-1'].rootAssembly
     session.viewports['Viewport: 1'].setValues(displayedObject=a)
+
+    mdb.Job(name='Job-1', model='Model-1', description='', type=ANALYSIS, 
+    atTime=None, waitMinutes=0, waitHours=0, queue=None, memory=90, 
+    memoryUnits=PERCENTAGE, explicitPrecision=SINGLE, 
+    nodalOutputPrecision=SINGLE, echoPrint=OFF, modelPrint=OFF, 
+    contactPrint=OFF, historyPrint=OFF, userSubroutine='', scratch='', 
+    resultsFormat=ODB, parallelizationMethodExplicit=DOMAIN, numDomains=4, 
+    activateLoadBalancing=False, multiprocessingMode=DEFAULT, numCpus=4)
+    mdb.jobs['Job-1'].submit(consistencyChecking=OFF)

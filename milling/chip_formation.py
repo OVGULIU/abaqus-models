@@ -342,7 +342,7 @@ if __name__ == "__main__":
     workpiece = Workpiece("Workpiece", length=mm(50), w_height=mm(60), w_width=mm(25), b_height=mm(10), b_width=mm(50))
     workpiece.create()
     ti6alv = Ti6AlV()
-    mdb.models['Model-1'].materials['Ti6AlV'].johnsonCookDamageInitiation.DamageEvolution(type=DISPLACEMENT, table=((0.001, ), ))
+    mdb.models['Model-1'].materials['Ti6AlV'].johnsonCookDamageInitiation.DamageEvolution(type=DISPLACEMENT, table=((0.002, ), ))
     workpiece.set_material(ti6alv)
     workpiece.mesh()
 
@@ -371,4 +371,4 @@ if __name__ == "__main__":
     contactPrint=OFF, historyPrint=OFF, userSubroutine='', scratch='', 
     resultsFormat=ODB, parallelizationMethodExplicit=DOMAIN, numDomains=4, 
     activateLoadBalancing=False, multiprocessingMode=DEFAULT, numCpus=4)
-    mdb.jobs['Job-1'].submit(consistencyChecking=OFF)
+    # mdb.jobs['Job-1'].submit(consistencyChecking=OFF)

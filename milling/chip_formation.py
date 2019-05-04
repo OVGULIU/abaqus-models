@@ -343,7 +343,14 @@ if __name__ == "__main__":
     workpiece.create()
     ti6alv = Ti6AlV()
     mdb.models['Model-1'].materials['Ti6AlV'].johnsonCookDamageInitiation.DamageEvolution(type=DISPLACEMENT, table=((0.002, ), ))
-    workpiece.set_material(ti6alv)
+
+    alu = Material("Alu", density= 2700, young=70e9, poisson=0.33, 
+        A=3.241e8, B=1.138e8, n=0.42, 
+        d1=-0.77, d2=1.45, d3=-0.47, ref_strain_rate=1.0, disp_at_failure=1e-4)
+
+    mdb.models['Model-1'].materials["Alu"].Conductivity(table=((7.2, ), ))
+
+    workpiece.set_material(alu)
     workpiece.mesh()
 
     step1 = Step("Step-1")

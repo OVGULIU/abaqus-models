@@ -485,7 +485,7 @@ if __name__ == "__main__":
 
     workpiece.set_section(aluminum_shell_section)
     workpiece.partition(3)
-    workpiece.mesh(size=0.002, dev_factor=0.1, min_size_factor = 0.1 )
+    workpiece.mesh(size=0.001, dev_factor=0.1, min_size_factor = 0.1 )
 
     jaw = Jaw(length=mm(15), width=mm(15), height=mm(15))
     jaw.set_section(steel_section)
@@ -516,4 +516,20 @@ if __name__ == "__main__":
     session.viewports['Viewport: 1'].odbDisplay.setPrimaryVariable(variableLabel='U', outputPosition=NODAL, refinement=(INVARIANT, 
         'Magnitude'), )
     session.viewports['Viewport: 1'].odbDisplay.basicOptions.setValues(renderShellThickness=ON)
-
+    session.viewports['Viewport: 1'].odbDisplay.contourOptions.setValues(
+        showMinLocation=ON, showMaxLocation=ON)
+    session.viewports['Viewport: 1'].viewportAnnotationOptions.setValues(
+        legendMinMax=ON)
+    session.viewports['Viewport: 1'].view.setValues(nearPlane=0.194155, 
+        farPlane=0.369833, width=0.156629, height=0.0735171, 
+        viewOffsetX=0.00765036, viewOffsetY=0.00400072)
+    session.viewports['Viewport: 1'].odbDisplay.contourOptions.setValues(
+        maxAutoCompute=OFF, maxValue=0.017, minAutoCompute=OFF, minValue=0.0)
+    session.pngOptions.setValues(imageSize=(2550, 1200))
+    session.printOptions.setValues(reduceColors=False)
+    name="force_2x_mesh"
+    session.printToFile(fileName='D:/ereme/GoogleDrive/PostGraduate/ZhAD/shell_model/'+name, 
+        format=PNG, canvasObjects=(session.viewports['Viewport: 1'], ))
+    session.viewports['Viewport: 1'].view.setValues(session.views['Front'])
+    session.printToFile(fileName='D:/ereme/GoogleDrive/PostGraduate/ZhAD/shell_model/'+name + "_front", 
+        format=PNG, canvasObjects=(session.viewports['Viewport: 1'], ))

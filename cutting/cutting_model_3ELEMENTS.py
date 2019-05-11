@@ -87,6 +87,8 @@ class Workpiece:
         pickedEdges = e.getSequenceFromMask(mask=('[#1002a ]', ), )
         self.part.seedEdgeByNumber(edges=pickedEdges, number=200, constraint=FINER)
         self.part.seedPart(size=0.002, deviationFactor=0.1, minSizeFactor=0.1)
+        pickedEdges = e.getSequenceFromMask(mask=('[#2000 ]', ), )
+        self.part.seedEdgeByNumber(edges=pickedEdges, number=3, constraint=FINER)
         c = self.part.cells
         pickedRegions = c.getSequenceFromMask(mask=('[#2 ]', ), )
         self.part.setMeshControls(regions=pickedRegions, technique=SWEEP, algorithm=ADVANCING_FRONT)

@@ -12,6 +12,25 @@ import argparse
 from math import *
 import numpy as np
 from sympy.geometry import *
+# -*- coding: mbcs -*-
+from part import *
+from material import *
+from section import *
+from assembly import *
+from step import *
+from interaction import *
+from load import *
+from mesh import *
+from optimization import *
+from job import *
+from sketch import *
+from visualization import *
+from connectorBehavior import *
+
+
+import inspect
+filename = inspect.getframeinfo(inspect.currentframe()).filename
+cd = os.path.dirname(os.path.abspath(filename))
 
 MAX_TIME = 0.001
 
@@ -30,6 +49,21 @@ def rad(value):
 def deg(value):
     return (value * pi)/180
 
+
+
+
+class Carbide:
+
+    def __init__(self):
+        self.name = "Carbide"
+        model = mdb.models['Model-1']
+        model.Material(name=self.name)
+        model.Material(name=self.name)
+        model.materials[self.name].Conductivity(table=((55.0, ), ))
+        model.materials[self.name].Density(table=((15000.0, ), ))
+        model.materials[self.name].Elastic(table=((640000000000.0, 0.22), ))
+        model.materials[self.name].Expansion(table=((6e-06, ), ))
+        model.materials[self.name].SpecificHeat(table=((240.0, ), ))
 
 class Material:
 
@@ -87,6 +121,10 @@ class Workpiece:
         pickedEdges = e.getSequenceFromMask(mask=('[#1002a ]', ), )
         self.part.seedEdgeByNumber(edges=pickedEdges, number=200, constraint=FINER)
         self.part.seedPart(size=0.002, deviationFactor=0.1, minSizeFactor=0.1)
+
+        self.part.seedPart(size=0.002, deviationFactor=0.1, minSizeFactor=0.1)
+        pickedEdges = e.getSequenceFromMask(mask=('[#2000 ]', ), )
+        
         c = self.part.cells
         pickedRegions = c.getSequenceFromMask(mask=('[#2 ]', ), )
         self.part.setMeshControls(regions=pickedRegions, technique=SWEEP, algorithm=ADVANCING_FRONT)
@@ -169,9 +207,30 @@ class Assembly:
         self.a.DatumCsysByDefault(CARTESIAN)
         self.a.Instance(name=workpiece.name, part=workpiece.part, dependent=ON)
         self.a.Instance(name=cutter.name, part=cutter.part, dependent=ON)
-        self.a.rotate(instanceList=(cutter.name, ), axisPoint=(0, 0, 0), axisDirection=(0.0, 1, 0.0), angle=90.0)
-        self.a.translate(instanceList=(cutter.name, ), vector=(workpiece.length, workpiece.height - 0.5 * workpiece.t, workpiece.width))
-        self.a.translate(instanceList=('Cutter', ), vector=(0.0, 0.0, 0.001))
+        self.a.translate(instanceList=('Tool', ), vector=(0.001754, 0.015977, 0.0))
+        self.a.translate(instanceList=('Tool', ), vector=(-0.01, 0.0, 0.0))
+        self.a.instances['Tool'].translateTo(clearance=0.0, direction=(1.0, 0.0, 0.0), fixedList=(mdb.models['Model-1'].rootAssembly.instances['Brick'].faces[5], ), movableList=(mdb.models['Model-1'].rootAssembly.instances['Tool'].faces[5], ))
+        
+        self.a.ReferencePoint(point=
+            mdb.models['Model-1'].rootAssembly.instances['Tool'].InterestingPoint(
+            mdb.models['Model-1'].rootAssembly.instances['Tool'].edges[170], CENTER))
+
+        self.a.Set(cells=
+            self.a.instances['Tool'].cells.getSequenceFromMask(('[#1 ]', ), ), name='b_Set-2')
+        mdb.models['Model-1'].RigidBody(bodyRegion=
+            self.a.sets['b_Set-2'], name='Constraint-1', 
+            refPointRegion=Region(referencePoints=(self.a.referencePoints[6], )))
+
+        mdb.models['Model-1'].rootAssembly.Set(name='m_Set-3', referencePoints=(
+            mdb.models['Model-1'].rootAssembly.referencePoints[6], ))
+        mdb.models['Model-1'].rootAssembly.Surface(name='s_Surf-1', side1Faces=
+            mdb.models['Model-1'].rootAssembly.instances['Tool'].faces.getSequenceFromMask(
+            ('[#ffffffff:2 #3ff ]', ), ))
+        mdb.models['Model-1'].Coupling(controlPoint=
+            mdb.models['Model-1'].rootAssembly.sets['m_Set-3'], couplingType=KINEMATIC, 
+            influenceRadius=WHOLE_SURFACE, localCsys=None, name='Constraint-2', 
+            surface=mdb.models['Model-1'].rootAssembly.surfaces['s_Surf-1'], u1=ON, u2=
+            ON, u3=ON, ur1=ON, ur2=ON, ur3=ON)
         session.viewports['Viewport: 1'].setValues(displayedObject=self.a)
         session.viewports['Viewport: 1'].view.fitView()
     
@@ -182,26 +241,14 @@ class Assembly:
         mdb.models['Model-1'].EncastreBC(name='BC workpiece bottom', createStepName='Initial', region=region, localCsys=None)
 
     def cutter_bc(self, step):
-        name = "BC cutter"
-        cutter_inst = self.a.instances['Cutter']
-        model = mdb.models['Model-1']
-        c1 = cutter_inst.cells
-        cells1 = c1.getSequenceFromMask(mask=('[#1 ]', ), )
-        f1 = cutter_inst.faces
-        faces1 = f1.getSequenceFromMask(mask=('[#3b ]', ), )
-        e1 = cutter_inst.edges
-        edges1 = e1.getSequenceFromMask(mask=('[#a65 ]', ), )
-        v1 = cutter_inst.vertices
-        verts1 = v1.getSequenceFromMask(mask=('[#20 ]', ), )
-        region = self.a.Set(vertices=verts1, edges=edges1, faces=faces1, cells=cells1, name='Cutter set')
-        
-        model.DisplacementBC(name=name, createStepName='Initial', 
-            region=region, u1=SET, u2=SET, u3=SET, ur1=SET, ur2=SET, ur3=SET, 
-            amplitude=UNSET, distributionType=UNIFORM, fieldName='', localCsys=None)
-        model.TabularAmplitude(name='Amplitude-1', timeSpan=STEP, 
-            smooth=SOLVER_DEFAULT, data=((0.0, 0.0), (MAX_TIME, 1.0)))
-        model.boundaryConditions[name].setValuesInStep(stepName=step.name, u1=-self.workpiece.length, amplitude='Amplitude-1')
-
+        mdb.models['Model-1'].rootAssembly.Set(name='Set-5', referencePoints=(
+            mdb.models['Model-1'].rootAssembly.referencePoints[6], ))
+        mdb.models['Model-1'].VelocityBC(amplitude=UNSET, createStepName='Initial', 
+            distributionType=UNIFORM, fieldName='', localCsys=None, name='BC-2', 
+            region=mdb.models['Model-1'].rootAssembly.sets['Set-5'], v1=0.0, v2=UNSET, 
+            v3=UNSET, vr1=UNSET, vr2=UNSET, vr3=0.0)
+        mdb.models['Model-1'].boundaryConditions['BC-2'].setValuesInStep(stepName=
+            'Step-1', v1=40.0, vr3=6000.0)
 
 class Step:
 
@@ -228,16 +275,66 @@ class Interaction:
             stepName=step.name, assignments=((GLOBAL, SELF, 'InteractionProperty-1'), ))
 
 
+class Tool:
+
+    def __init__(self, name, scale):
+        self.name = name
+        self.step_file = cd + '\milling_cutter.stp'
+        self.diameter = mm(10)  # from file
+        self.length = mm(100)
+        self.cutter_length = mm(22)
+        self.scale = scale
+        self.part = None
+
+    def create(self):
+        print(self.step_file)
+        step = mdb.openStep(self.step_file)
+        mdb.models['Model-1'].PartFromGeometryFile(name=self.name, geometryFile=step, 
+                combine=False, dimensionality=THREE_D, type=DEFORMABLE_BODY, scale=self.scale)
+        self.part = mdb.models['Model-1'].parts[self.name]
+
+
+    def set_material(self, material):
+        model = mdb.models['Model-1']
+        model.HomogeneousSolidSection(name=material.name, material=material.name, thickness=None)  
+        region = self.part.Set(cells=self.part.cells, name='Material region')
+        self.part.SectionAssignment(region=region, sectionName=material.name, offset=0.0, 
+            offsetType=MIDDLE_SURFACE, offsetField='', thicknessAssignment=FROM_SECTION)
+
+    def mesh(self):
+        self.part.seedPart(size=0.0015, deviationFactor=0.1, minSizeFactor=0.1)
+        c = self.part.cells
+        pickedRegions = c.getSequenceFromMask(mask=('[#1 ]', ), )
+        self.part.setMeshControls(regions=pickedRegions, elemShape=TET, technique=FREE)
+        elemType1 = mesh.ElemType(elemCode=C3D8, elemLibrary=EXPLICIT)
+        elemType2 = mesh.ElemType(elemCode=C3D6, elemLibrary=EXPLICIT)
+        elemType3 = mesh.ElemType(elemCode=C3D4, elemLibrary=EXPLICIT, 
+            secondOrderAccuracy=OFF, distortionControl=DEFAULT)
+        cells = c.getSequenceFromMask(mask=('[#1 ]', ), )
+        pickedRegions =(cells, )
+        self.part.setElementType(regions=pickedRegions, elemTypes=(elemType1, elemType2, elemType3))
+        self.part.generateMesh()
+
+    def __str__(self):
+        return "Tool: name={}, scale={}".format(self.name, self.scale)
+
+    def __repr__(self):
+        return str(self)
+
+
 if __name__ == "__main__":
     executeOnCaeStartup()
     Mdb()  # clear all
     workpiece = Workpiece("Brick", length=mm(20), width=mm(2), height=mm(4))
     workpiece.create()
     workpiece.mesh()
-    cutter = Cutter("Cutter",  length=mm(4),width=mm(4), height=mm(4), angle=deg(10))
-    cutter.create()
-    cutter.extrude_cut()
-    cutter.mesh()
+
+    tool = Tool("Tool",  scale=0.4e-3)
+    tool.create()
+    carbide = Carbide()
+    tool.set_material(carbide)
+    tool.mesh()
+
     # Create materials
     steel = Material("Steel", density= 7870, young=2e11, poisson=0.29, 
         A=375e6, B=552e6, n=0.457, 
@@ -249,9 +346,9 @@ if __name__ == "__main__":
     alu_section = mdb.models['Model-1'].HomogeneousSolidSection(name='Alu section', material=alu.name, thickness=None)
     # assign materials
     workpiece.set_section(alu_section)
-    cutter.set_section(steel_section)
+    tool.set_material(steel)
 
-    assembly = Assembly(workpiece, cutter)
+    assembly = Assembly(workpiece, tool)
     step1 = Step("Step-1")
     Interaction(step1, friction=0.15)
     assembly.workpiece_bc()
@@ -266,5 +363,7 @@ if __name__ == "__main__":
     mdb.models['Model-1'].fieldOutputRequests['F-Output-1'].setValues(variables=(
     'S', 'SVAVG', 'PE', 'PEVAVG', 'PEEQ', 'PEEQVAVG', 'LE', 'U', 'V', 'A', 
     'RF', 'CSTRESS', 'EVF', 'STATUS'))
+    mdb.models['Model-1'].fieldOutputRequests['F-Output-1'].setValues(numIntervals=400)
+
     # mdb.jobs['Chipformation'].submit(consistencyChecking=OFF)
 

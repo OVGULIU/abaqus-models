@@ -251,7 +251,7 @@ class Workpiece:
         e3_point = (0.5* (self.b_width - self.w_width), self.b_height + 0.5 * self.w_height, self.length)
         e4_point = (0.5* (self.b_width + self.w_width), self.b_height + 0.5 * self.w_height, self.length)
         pickedEdges = e.findAt((e1_point, ), (e2_point, ), (e3_point, ), (e4_point, ))
-        self.part.seedEdgeByNumber(edges=pickedEdges, number=int(1*self.w_height * 1e3), constraint=FINER)
+        self.part.seedEdgeByNumber(edges=pickedEdges, number=int(0.5*self.w_height * 1e3), constraint=FINER)
 
         e1_point = (0.5* (self.b_width - self.w_width), self.b_height, 0.5 * self.length)
         e2_point = (0.5* (self.b_width + self.w_width), self.b_height, 0.5 * self.length)
@@ -264,7 +264,7 @@ class Workpiece:
         print("Len:"+str(len(e1_point)))
         self.part.DatumPointByCoordinate(coords=e1_point)
         pickedEdges = e.findAt((e1_point, ), )
-        self.part.seedEdgeByNumber(edges=pickedEdges, number=int(2*self.t * 1e3), constraint=FINER)
+        self.part.seedEdgeByNumber(edges=pickedEdges, number=int(6*self.t * 1e3), constraint=FINER)
         self.part.seedPart(size=0.01, deviationFactor=0.051, minSizeFactor=0.1)
     
         c = self.part.cells
@@ -302,6 +302,7 @@ class Assembly:
         self.a.translate(instanceList=('Tool', ), vector=(0, 0.005, 0))
         self.a.translate(instanceList=('Tool', ), vector=(0.0, 0.0, -0.0125))
         self.a.translate(instanceList=(tool.name, ), vector=(mm(-18), 0.0, 0))
+        self.a.translate(instanceList=('Tool', ), vector=(-0.003, -0.02, 0.0))
         self.surface_workpiece()
         self.surface_tool()
         session.viewports['Viewport: 1'].setValues(displayedObject=self.a)
@@ -310,10 +311,10 @@ class Assembly:
     def surface_workpiece(self):
         mdb.models['Model-1'].rootAssembly.Surface(face1Elements=
             mdb.models['Model-1'].rootAssembly.instances['Workpiece'].elements.getSequenceFromMask(
-            mask=('[#ffffffff:937 #ffff #0:202 #fff00000 #ffffffff:93 #fff ]', ), ), 
+            mask=('[#ffffffff:890 #fffff #0:48 #fffffffc #ffffffff:30 #3ff ]', ), ), 
             face2Elements=
             mdb.models['Model-1'].rootAssembly.instances['Workpiece'].elements.getSequenceFromMask(
-            mask=('[#0:15 #fff00000 #ffffffff:921 #ffff ]', ), ), face3Elements=
+            mask=('[#0:46 #f0000000 #ffffffff:890 #ffff ]', ), ), face3Elements=
             mdb.models['Model-1'].rootAssembly.instances['Workpiece'].elements.getSequenceFromMask(
             mask=('[#ffffffff:937 #ffff ]', ), ), face4Elements=
             mdb.models['Model-1'].rootAssembly.instances['Workpiece'].elements.getSequenceFromMask(
@@ -451,40 +452,20 @@ class Assembly:
             ' #dfffffff #ffffffff #ffff7fff #ffffffff #fffffffd #fff7ffff #ffffffff', 
             ' #ffffffdf #ff7fffff #ffffffff #fffffdff #f7ffffff #ffffffff #ffffdfff', 
             ' #7fffffff #ffffffff #fffdffff #ffffffff #fffffff7 #ffdfffff #ffffffff', 
-            ' #ffffff7f #fdffffff #ffffffff #fffff7ff #dfffffff #ffffffff #ffff7fff', 
-            ' #ffffffff:15 #f ]', ), ), face5Elements=
+            ' #ffffff7f #fdffffff #ffffffff #fffff7ff #dfffffff #ffffffff #7fff ]', ), 
+            ), face5Elements=
             mdb.models['Model-1'].rootAssembly.instances['Workpiece'].elements.getSequenceFromMask(
-            mask=('[#ffffffff:14 #3 #fff00000 #ffffffff:13 #3fffff #0 #ffffff00', 
-            ' #ffffffff:13 #3ff #f0000000 #ffffffff:13 #3fffffff #0 #ffff0000', 
-            ' #ffffffff:13 #3ffff #0 #fffffff0 #ffffffff:13 #3f #ff000000', 
-            ' #ffffffff:13 #3ffffff #0 #fffff000 #ffffffff:13 #3fff #0', 
-            ' #ffffffff:14 #3 #fff00000 #ffffffff:13 #3fffff #0 #ffffff00', 
-            ' #ffffffff:13 #3ff #f0000000 #ffffffff:13 #3fffffff #0 #ffff0000', 
-            ' #ffffffff:13 #3ffff #0 #fffffff0 #ffffffff:13 #3f #ff000000', 
-            ' #ffffffff:13 #3ffffff #0 #fffff000 #ffffffff:13 #3fff #0', 
-            ' #ffffffff:14 #3 #fff00000 #ffffffff:13 #3fffff #0 #ffffff00', 
-            ' #ffffffff:13 #3ff #f0000000 #ffffffff:13 #3fffffff #0 #ffff0000', 
-            ' #ffffffff:13 #3ffff #0 #fffffff0 #ffffffff:13 #3f #ff000000', 
-            ' #ffffffff:13 #3ffffff #0 #fffff000 #ffffffff:13 #3fff #0', 
-            ' #ffffffff:14 #3 #fff00000 #ffffffff:13 #3fffff #0 #ffffff00', 
-            ' #ffffffff:13 #3ff #f0000000 #ffffffff:13 #3fffffff #0 #ffff0000', 
-            ' #ffffffff:13 #3ffff #0 #fffffff0 #ffffffff:13 #3f #ff000000', 
-            ' #ffffffff:13 #3ffffff #0 #fffff000 #ffffffff:13 #3fff #0', 
-            ' #ffffffff:14 #3 #fff00000 #ffffffff:13 #3fffff #0 #ffffff00', 
-            ' #ffffffff:13 #3ff #f0000000 #ffffffff:13 #3fffffff #0 #ffff0000', 
-            ' #ffffffff:13 #3ffff #0 #fffffff0 #ffffffff:13 #3f #ff000000', 
-            ' #ffffffff:13 #3ffffff #0 #fffff000 #ffffffff:13 #3fff #0', 
-            ' #ffffffff:14 #3 #fff00000 #ffffffff:13 #3fffff #0 #ffffff00', 
-            ' #ffffffff:13 #3ff #f0000000 #ffffffff:13 #3fffffff #0 #ffff0000', 
-            ' #ffffffff:13 #3ffff #0 #fffffff0 #ffffffff:13 #3f #ff000000', 
-            ' #ffffffff:13 #3ffffff #0 #fffff000 #ffffffff:13 #3fff #0', 
-            ' #ffffffff:14 #3 #fff00000 #ffffffff:13 #3fffff #0 #ffffff00', 
-            ' #ffffffff:13 #3ff #f0000000 #ffffffff:13 #3fffffff #0 #ffff0000', 
-            ' #ffffffff:13 #3ffff #0 #fffffff0 #ffffffff:13 #3f #ff000000', 
-            ' #ffffffff:13 #3ffffff #0 #fffff000 #ffffffff:13 #3fff #0', 
-            ' #ffffffff:14 #3 #fff00000 #ffffffff:13 #3fffff #0 #ffffff00', 
-            ' #ffffffff:13 #3ff #f0000000 #ffffffff:13 #3fffffff ]', ), ), 
-            face6Elements=
+            mask=(
+            '[#ffffffff:45 #3ff #f0000000 #ffffffff:45 #3f #ff000000 #ffffffff:45', 
+            ' #3 #fff00000 #ffffffff:44 #3fffffff #0 #ffff0000 #ffffffff:44', 
+            ' #3ffffff #0 #fffff000 #ffffffff:44 #3fffff #0 #ffffff00', 
+            ' #ffffffff:44 #3ffff #0 #fffffff0 #ffffffff:44 #3fff #0', 
+            ' #ffffffff:45 #3ff #f0000000 #ffffffff:45 #3f #ff000000 #ffffffff:45', 
+            ' #3 #fff00000 #ffffffff:44 #3fffffff #0 #ffff0000 #ffffffff:44', 
+            ' #3ffffff #0 #fffff000 #ffffffff:44 #3fffff #0 #ffffff00', 
+            ' #ffffffff:44 #3ffff #0 #fffffff0 #ffffffff:44 #3fff #0', 
+            ' #ffffffff:45 #3ff #f0000000 #ffffffff:45 #3f #ff000000 #ffffffff:45', 
+            ' #3 #fff00000 #ffffffff:44 #3fffffff ]', ), ), face6Elements=
             mdb.models['Model-1'].rootAssembly.instances['Workpiece'].elements.getSequenceFromMask(
             mask=(
             '[#fffffffe #fffbffff #ffffffff #ffffffef #ffbfffff #ffffffff #fffffeff', 
@@ -623,6 +604,7 @@ class Assembly:
             ' #fffffeff #fbffffff #ffffffff #ffffefff #bfffffff #ffffffff #ffff ]', ), 
             ), name='Workpiece Surface')
 
+        
     def surface_tool(self):
         mdb.models['Model-1'].rootAssembly.Surface(face1Elements=
             mdb.models['Model-1'].rootAssembly.instances['Tool'].elements.getSequenceFromMask(
@@ -935,7 +917,7 @@ class Assembly:
             ' #ffffffff #fffffffe #fffff7ff #ffffffff:3 #ffffdfff #ffffffff:22 #ffff7fff', 
             ' #ffffffff:2 #ffefffff #ffffffff:15 #efffffff #ffffffff:2 #feffffef #ffffffff:2', 
             ' #fffff ]', ), ), name='Tool Surface')
-
+        
 
     def workpiece_bc(self):
         name = 'Workpiece Bottom Encastre'
@@ -975,7 +957,7 @@ if __name__ == "__main__":
     tool.set_material(carbide)
     tool.mesh()
 
-    workpiece = Workpiece("Workpiece", length=mm(50), w_height=mm(60), w_width=mm(10), b_height=mm(10), b_width=mm(25))
+    workpiece = Workpiece("Workpiece", length=mm(50), w_height=mm(40), w_width=mm(8), b_height=mm(10), b_width=mm(25))
     workpiece.create()
     ti6alv = Ti6AlV()
     mdb.models['Model-1'].materials['Ti6AlV'].johnsonCookDamageInitiation.DamageEvolution(type=DISPLACEMENT, table=((0.002, ), ))
@@ -1001,7 +983,7 @@ if __name__ == "__main__":
         'STATUS', # important!
         'SVAVG', 'U', 'V'))
     model.fieldOutputRequests['F-Output-1'].setValues(
-    numIntervals=400)
+    numIntervals=1000)
     model.steps['Step-1'].setValues(timePeriod=0.002)
 
 
